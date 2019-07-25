@@ -13,6 +13,7 @@ from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 
+# --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
 
 def gather_sequence_info(sequence_dir, detection_file):
     """Gather sequence information, such as image filenames, detections,
@@ -40,7 +41,7 @@ def gather_sequence_info(sequence_dir, detection_file):
         * max_frame_idx: Index of the last frame.
 
     """
-    image_dir = os.path.join(sequence_dir, "img1")
+    image_dir = os.path.join(sequence_dir)
     image_filenames = {
         int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
         for f in os.listdir(image_dir)}
@@ -159,7 +160,7 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
     """
     seq_info = gather_sequence_info(sequence_dir, detection_file)
     metric = nn_matching.NearestNeighborDistanceMetric(
-        "cosine", max_cosine_distance, nn_budget)
+        "euclidean", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
     results = []
 
@@ -208,6 +209,8 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
     # Store results.
     f = open(output_file, 'w')
     for row in results:
+        # if not loading_groundtruth and eval_3d is True and(t_data.X==-1000 or t_data.Y==-1000 or t_data.Z==-1000):
+        #
         print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
             row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
 
@@ -224,18 +227,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Deep SORT")
     parser.add_argument(
         "--sequence_dir", help="Path to MOTChallenge sequence directory",
-        default=None, required=True)
+        default=r"/media/msis_dasol/1TB/dataset/test/MOT16-06", required=True)
     parser.add_argument(
-        "--detection_file", help="Path to custom detections.", default=None,
+        "--detection_file", help="Path to custom detections.",
+        default=r"/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test",
         required=True)
     parser.add_argument(
         "--output_file", help="Path to the tracking output file. This file will"
         " contain the tracking results on completion.",
-        default="/tmp/hypotheses.txt")
+        default="./hypotheses_euclidean.txt")
     parser.add_argument(
         "--min_confidence", help="Detection confidence threshold. Disregard "
         "all detections that have a confidence lower than this value.",
-        default=0.8, type=float)
+        default=0.3, type=float)
     parser.add_argument(
         "--min_detection_height", help="Threshold on the detection bounding "
         "box height. Detections with height smaller than this value are "
@@ -248,7 +252,7 @@ def parse_args():
         "metric (object appearance).", type=float, default=0.2)
     parser.add_argument(
         "--nn_budget", help="Maximum size of the appearance descriptors "
-        "gallery. If None, no budget is enforced.", type=int, default=None)
+        "gallery. If None, no budget is enforced.", type=int, default=100)
     parser.add_argument(
         "--display", help="Show intermediate tracking results",
         default=True, type=bool_string)
