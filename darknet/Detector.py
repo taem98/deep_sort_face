@@ -193,8 +193,6 @@ class Detector(object):
         # predict_image_letterbox(net, im)
         # letter_box = 1
         if debug: print("did prediction")
-        print(im.w)
-        print(im.h)
         # dets = get_network_boxes(net, custom_image_bgr.shape[1], custom_image_bgr.shape[0], thresh, hier_thresh, None, 0, pnum, letter_box) # OpenCV
         dets = self.get_network_boxes(self.netMain, im.w, im.h, thresh, hier_thresh, None, 0, pnum, letter_box)
         if debug: print("Got dets")
@@ -205,23 +203,32 @@ class Detector(object):
         if debug: print("did sort")
         res = []
         if debug: print("about to range")
-        for j in range(num):
-            if debug: print("Ranging on " + str(j) + " of " + str(num))
-            if debug: print("Classes: " + str(self.metaMain), self.metaMain.classes, self.metaMain.names)
-            for i in range(self.metaMain.classes):
-                if debug: print("Class-ranging on " + str(i) + " of " + str(self.metaMain.classes) + "= " + str(dets[j].prob[i]))
-                if dets[j].prob[i] > 0:
-                    b = dets[j].bbox
-                    if self.altNames is None:
-                        nameTag = self.metaMain.names[i]
-                    else:
-                        nameTag = self.altNames[i]
-                    if debug:
-                        print("Got bbox", b)
-                        print(nameTag)
-                        print(dets[j].prob[i])
-                        print((b.x, b.y, b.w, b.h))
-                    res.append((nameTag, dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+        class_range = range(self.metaMain.classes)
+        if self.altNames is None:
+            res = [(self.metaMain.names[i], dets[j].prob[i], (dets[j].bbox.x, dets[j].bbox.y, dets[j].bbox.w, dets[j].bbox.h))
+                   for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+        else:
+            res = [(self.altNames[i], dets[j].prob[i], (dets[j].bbox.x, dets[j].bbox.y, dets[j].bbox.w, dets[j].bbox.h))
+                   for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+
+        # we try to optimize the speed here
+        # for j in range(num):
+        #     if debug: print("Ranging on " + str(j) + " of " + str(num))
+        #     if debug: print("Classes: " + str(self.metaMain), self.metaMain.classes, self.metaMain.names)
+        #     for i in range(self.metaMain.classes):
+        #         if debug: print("Class-ranging on " + str(i) + " of " + str(self.metaMain.classes) + "= " + str(dets[j].prob[i]))
+        #         if dets[j].prob[i] > 0:
+        #             b = dets[j].bbox
+        #             if self.altNames is None:
+        #                 nameTag = self.metaMain.names[i]
+        #             else:
+        #                 nameTag = self.altNames[i]
+        #             if debug:
+        #                 print("Got bbox", b)
+        #                 print(nameTag)
+        #                 print(dets[j].prob[i])
+        #                 print((b.x, b.y, b.w, b.h))
+        #             res.append((nameTag, dets[j].prob[i], (b.x, b.y, b.w, b.h)))
         if debug: print("did range")
         res = sorted(res, key=lambda x: -x[1])
         if debug: print("did sort")
@@ -229,7 +236,7 @@ class Detector(object):
         if debug: print("freed detections")
         return res
 
-    def __call__(self, img, thres = 0.25):
+    def __call__(self, img, thresh=.5, hier_thresh=.5, nms=.45):
 
         # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # frame_resized = cv2.resize(img,
@@ -241,17 +248,37 @@ class Detector(object):
 
         self.copy_image_from_bytes(darknet_image, img.tobytes())
         #
-        detections = self.detect_image(darknet_image, thresh=thres)
+        num = c_int(0)
+        # if debug: print("Assigned num")
+        pnum = pointer(num)
+        # if debug: print("Assigned pnum")
+        self.predict_image(self.netMain, darknet_image)
+        letter_box = 0
+        # predict_image_letterbox(net, im)
+        # letter_box = 1
+        # if debug: print("did prediction")
+        # dets = get_network_boxes(net, custom_image_bgr.shape[1], custom_image_bgr.shape[0], thresh, hier_thresh, None, 0, pnum, letter_box) # OpenCV
+        dets = self.get_network_boxes(self.netMain, darknet_image.w, darknet_image.h, thresh, hier_thresh, None, 0, pnum, letter_box)
+        # if debug: print("Got dets")
+        num = pnum[0]
+        # if debug: print("got zeroth index of pnum")
+        if nms:
+            self.do_nms_sort(dets, num, self.metaMain.classes, nms)
+        # if debug: print("did sort")
+        # res = []
+        # if debug: print("about to range")
+        class_range = range(self.metaMain.classes)
+        if self.altNames is None:
+            res = [Detection([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
+                             dets[j].prob[i], 0, self.metaMain.names[i])
+                   for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+        else:
+            res = [Detection([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
+                             dets[j].prob[i], 0, self.altNames[i])
+                   for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+
+        self.free_detections(dets, num)
+
         self.free_image(darknet_image)
-        # im = self.load_image(img.encode("ascii"), 0, 0)
-        # if debug: print("Loaded image")
-        # detections = self.detect_image(im)
-        # self.free_image(im)
-        # if debug: print("freed image")
-        # return ret
 
-        detections_lst = [
-            Detection([detection[2][0] - detection[2][2] / 2, detection[2][1] - detection[2][3] / 2, detection[2][2], detection[2][3]], detection[1], 0,
-                      detection[0]) for detection in detections]
-
-        return detections_lst
+        return res

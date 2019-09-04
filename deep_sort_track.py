@@ -15,6 +15,27 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from darknet.Detector import Detector
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
+from tripletnet_encoder import extract_image_patch
+from tripletnet_encoder.TripletNet import TripletNet
+
+def create_box_encoder(model_filename, batch_size=32):
+    image_encoder = TripletNet(model_filename, gpu_num=0)
+    image_shape = image_encoder.image_shape
+
+    def encoder(image, boxes):
+        image_patches = []
+        for box in boxes:
+            patch = extract_image_patch(image, box, image_shape[:2])
+            if patch is None:
+                print("WARNING: Failed to extract image patch: %s." % str(box))
+                patch = np.random.uniform(
+                    0., 255., image_shape).astype(np.uint8)
+            image_patches.append(patch)
+        image_patches = np.asarray(image_patches)
+        return image_encoder(image_patches, batch_size)
+
+    return encoder
+
 
 def gather_sequence_info(sequence_dir, detection_file):
     """Gather sequence information, such as image filenames, detections,
@@ -184,7 +205,7 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
         #     we generate the detection file here
             _t0 = time.time()
             # detections = detector(seq_info["image_filenames"][frame_idx])
-        detections = detector(image)
+            detections = detector(image)
         _t1 = time.time() - _t0
         detections = [d for d in detections if d.confidence >= min_confidence and d.tlwh[3] > min_detection_height]
 
