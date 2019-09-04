@@ -55,6 +55,20 @@ hasGPU = True
 
 class Detector(object):
     def __init__(self, configPath, weightPath, metaPath, sharelibPath, gpu_num=0):
+        """Generate detections results from image.
+
+            Parameters
+            ----------
+            configPath : path to the cfg of yolo model
+            weightPath : path to the weght of selected yolo model
+            metaPath : path to the meta of selected yolo model
+            sharelibPath : path to the shared library of yolo ( compile darknet with USELIB=1
+            gpu_num : define which gpu darknet will run on
+            Returns
+            -------
+                List[([x,y,w,h],prob, class_id, class_name)]
+                Returns detection responses at given frame index.
+        """
         if os.name == "nt":
             raise Exception("Windows is not support")
         else:
@@ -268,13 +282,14 @@ class Detector(object):
         # res = []
         # if debug: print("about to range")
         class_range = range(self.metaMain.classes)
+        # res format: [([x,y,w,h],prob, class_id, class_name)]
         if self.altNames is None:
-            res = [Detection([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
-                             dets[j].prob[i], 0, self.metaMain.names[i])
+            res = [([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
+                             dets[j].prob[i], i, self.metaMain.names[i])
                    for j in range(num) for i in class_range if dets[j].prob[i] > 0]
         else:
-            res = [Detection([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
-                             dets[j].prob[i], 0, self.altNames[i])
+            res = [([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
+                             dets[j].prob[i], i, self.altNames[i])
                    for j in range(num) for i in class_range if dets[j].prob[i] > 0]
 
         self.free_detections(dets, num)

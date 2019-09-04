@@ -18,21 +18,26 @@ from darknet.Detector import Detector
 from tripletnet_encoder import extract_image_patch
 from tripletnet_encoder.TripletNet import TripletNet
 
-def create_box_encoder(model_filename, batch_size=32):
-    image_encoder = TripletNet(model_filename, gpu_num=0)
+def create_box_encoder(model_filename, class_filter, gpu_num=0, batch_size=32):
+    image_encoder = TripletNet(model_filename, gpu_num=gpu_num)
     image_shape = image_encoder.image_shape
 
-    def encoder(image, boxes):
+    def encoder(image, detect_res):
         image_patches = []
-        for box in boxes:
-            patch = extract_image_patch(image, box, image_shape[:2])
-            if patch is None:
-                print("WARNING: Failed to extract image patch: %s." % str(box))
-                patch = np.random.uniform(
-                    0., 255., image_shape).astype(np.uint8)
-            image_patches.append(patch)
+        image_patches_id = []
+        for idx, detect in enumerate(detect_res):
+            if detect[3] in class_filter:
+                patch = extract_image_patch(image, detect[0], image_shape[:2])
+                if patch is None:
+                    print("WARNING: Failed to extract image patch: %s." % str(box))
+                    patch = np.random.uniform(
+                        0., 255., image_shape).astype(np.uint8)
+                image_patches_id.append(idx)
+                image_patches.append(patch)
         image_patches = np.asarray(image_patches)
-        return image_encoder(image_patches, batch_size)
+        features = image_encoder(image_patches, batch_size)
+        detections = [Detection(detect_res[id][0], detect_res[id][1], features[idx], detect_res[id][3]) for idx, id in enumerate(image_patches_id)]
+        return detections
 
     return encoder
 
@@ -184,12 +189,13 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
     cfg_path = "../alex_darknet/cfg/yolov3.cfg"
     meta_path = "darknet/cfg/coco.data"
     weight_path = "../alex_darknet/yolov3.weights"
-    detector = Detector(configPath=cfg_path, metaPath=meta_path, weightPath=weight_path, sharelibPath="./libdarknet.so", gpu_num=1)
+    detector = Detector(configPath=cfg_path, metaPath=meta_path, weightPath=weight_path, sharelibPath="./libdarknet.so", gpu_num=0)
+    encoder = create_box_encoder("/home/msis_member/Project/triplet-reid/experiment/VeRi/run3/encoder_trinet.pb", class_filter=['car', 'truck', 'bus'])
     detection_file = None # we set
     seq_info = gather_sequence_info(sequence_dir, detection_file)
     metric = nn_matching.NearestNeighborDistanceMetric(
         "euclidean", max_cosine_distance, nn_budget)
-    # tracker = Tracker(metric)
+    tracker = Tracker(metric)
     # results = []
 
     def frame_callback(vis, frame_idx):
@@ -205,27 +211,30 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
         #     we generate the detection file here
             _t0 = time.time()
             # detections = detector(seq_info["image_filenames"][frame_idx])
-            detections = detector(image)
-        _t1 = time.time() - _t0
+            detect_res = detector(image, thresh=0.5)
+            _t1 = time.time() - _t0
+            # bbxs = [d[0] for d in detect_res if d[1] >= min_confidence and d[3] == "car" or d[3] == "truck" or d[3] == "bus"]
+            detections = encoder(image, detect_res)
+
         detections = [d for d in detections if d.confidence >= min_confidence and d.tlwh[3] > min_detection_height]
 
         # Run non-maxima suppression.
-        # boxes = np.array([d.tlwh for d in detections])
-        # scores = np.array([d.confidence for d in detections])
-        # indices = preprocessing.non_max_suppression(
-        #     boxes, nms_max_overlap, scores)
-        # detections = [detections[i] for i in indices]
+        boxes = np.array([d.tlwh for d in detections])
+        scores = np.array([d.confidence for d in detections])
+        indices = preprocessing.non_max_suppression(
+                                boxes, nms_max_overlap, scores)
+        detections = [detections[i] for i in indices]
 
         # Update tracker.
-        # tracker.predict()
-        # tracker.update(detections)
-
+        tracker.predict()
+        tracker.update(detections)
+        _t2 = time.time() - _t0 - _t1
         # Update visualization.
         if display:
             vis.set_image(image.copy())
-            vis.viewer.annotate(4, 20, "fps {:03.1f}".format(1/_t1))
+            vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1/_t1, 1/_t2))
             vis.draw_detections(detections)
-            # vis.draw_trackers(tracker.tracks)
+            vis.draw_trackers(tracker.tracks)
         # print(seq_info["detections"][frame_idx][7])
         # Store results.
         # for track in tracker.tracks:
@@ -239,7 +248,7 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
     # Run tracker.
     if display:
         visualizer = visualization.Visualization(seq_info, update_ms=5)
-        visualizer.viewer.enable_videowriter("detection_only.avi", fps=30)
+        visualizer.viewer.enable_videowriter("detection_with_track.avi", fps=5)
     else:
         visualizer = visualization.NoVisualization(seq_info)
     visualizer.run(frame_callback)
