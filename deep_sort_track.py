@@ -183,7 +183,8 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
         else:
         #     we generate the detection file here
             _t0 = time.time()
-            detections = detector(seq_info["image_filenames"][frame_idx])
+            # detections = detector(seq_info["image_filenames"][frame_idx])
+        detections = detector(image)
         _t1 = time.time() - _t0
         detections = [d for d in detections if d.confidence >= min_confidence and d.tlwh[3] > min_detection_height]
 

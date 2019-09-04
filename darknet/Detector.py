@@ -169,11 +169,12 @@ class Detector(object):
             except Exception:
                 pass
 
-        self.darknet_image = self.make_image(self.nw_width(self.netMain),
-                                                self.nw_height(self.netMain), 3)
+        # self.darknet_image = self.make_image(self.nw_width(self.netMain),
+        #                                         self.nw_height(self.netMain), 3)
 
     def __del__(self):
-        self.free_image(self.darknet_image)
+        pass
+        # self.free_image(self.darknet_image)
 
     def detect_image(self, im, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
         # import cv2
@@ -236,13 +237,16 @@ class Detector(object):
         #                             self.nw_height(self.netMain)),
         #                            interpolation=cv2.INTER_LINEAR)
         #
-        # self.copy_image_from_bytes(self.darknet_image, frame_resized.tobytes())
+        darknet_image = self.make_image(img.shape[1], img.shape[0], img.shape[2])
+
+        self.copy_image_from_bytes(darknet_image, img.tobytes())
         #
-        # detections = self.detect_image( self.darknet_image, thresh=thres)
-        im = self.load_image(img.encode("ascii"), 0, 0)
+        detections = self.detect_image(darknet_image, thresh=thres)
+        self.free_image(darknet_image)
+        # im = self.load_image(img.encode("ascii"), 0, 0)
         # if debug: print("Loaded image")
-        detections = self.detect_image(im)
-        self.free_image(im)
+        # detections = self.detect_image(im)
+        # self.free_image(im)
         # if debug: print("freed image")
         # return ret
 
