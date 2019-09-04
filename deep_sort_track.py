@@ -3,6 +3,7 @@ from __future__ import division, print_function, absolute_import
 
 import argparse
 import os
+import time
 
 import cv2
 import numpy as np
@@ -12,7 +13,7 @@ from application_util import visualization
 from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
-
+from darknet.Detector import Detector
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
 
 def gather_sequence_info(sequence_dir, detection_file):
@@ -50,6 +51,7 @@ def gather_sequence_info(sequence_dir, detection_file):
     detections = None
     if detection_file is not None:
         detections = np.load(detection_file)
+
     groundtruth = None
     if os.path.exists(groundtruth_file):
         groundtruth = np.loadtxt(groundtruth_file, delimiter=',')
@@ -158,73 +160,87 @@ def run(sequence_dir, detection_file, output_file, min_confidence,
         If True, show visualization of intermediate tracking results.
 
     """
+    cfg_path = "../alex_darknet/cfg/yolov3.cfg"
+    meta_path = "darknet/cfg/coco.data"
+    weight_path = "../alex_darknet/yolov3.weights"
+    detector = Detector(configPath=cfg_path, metaPath=meta_path, weightPath=weight_path, sharelibPath="./libdarknet.so", gpu_num=1)
+    detection_file = None # we set
     seq_info = gather_sequence_info(sequence_dir, detection_file)
     metric = nn_matching.NearestNeighborDistanceMetric(
         "euclidean", max_cosine_distance, nn_budget)
-    tracker = Tracker(metric)
-    results = []
+    # tracker = Tracker(metric)
+    # results = []
 
     def frame_callback(vis, frame_idx):
         print("Processing frame %05d" % frame_idx)
-
+        _t0 = time.time()
+        image = cv2.imread(
+            seq_info["image_filenames"][frame_idx], cv2.IMREAD_COLOR)
         # Load image and generate detections.
-        detections = create_detections(
-            seq_info["detections"], frame_idx, min_detection_height)
-        detections = [d for d in detections if d.confidence >= min_confidence]
+        if seq_info["detections"] is not None:
+            detections = create_detections(
+                seq_info["detections"], frame_idx, min_detection_height)
+        else:
+        #     we generate the detection file here
+            _t0 = time.time()
+            detections = detector(seq_info["image_filenames"][frame_idx])
+        _t1 = time.time() - _t0
+        detections = [d for d in detections if d.confidence >= min_confidence and d.tlwh[3] > min_detection_height]
 
         # Run non-maxima suppression.
-        boxes = np.array([d.tlwh for d in detections])
-        scores = np.array([d.confidence for d in detections])
-        indices = preprocessing.non_max_suppression(
-            boxes, nms_max_overlap, scores)
-        detections = [detections[i] for i in indices]
+        # boxes = np.array([d.tlwh for d in detections])
+        # scores = np.array([d.confidence for d in detections])
+        # indices = preprocessing.non_max_suppression(
+        #     boxes, nms_max_overlap, scores)
+        # detections = [detections[i] for i in indices]
 
         # Update tracker.
-        tracker.predict()
-        tracker.update(detections)
+        # tracker.predict()
+        # tracker.update(detections)
 
         # Update visualization.
         if display:
-            image = cv2.imread(
-                seq_info["image_filenames"][frame_idx], cv2.IMREAD_COLOR)
             vis.set_image(image.copy())
+            vis.viewer.annotate(4, 20, "fps {:03.1f}".format(1/_t1))
             vis.draw_detections(detections)
-            vis.draw_trackers(tracker.tracks)
+            # vis.draw_trackers(tracker.tracks)
         # print(seq_info["detections"][frame_idx][7])
         # Store results.
-        for track in tracker.tracks:
-            if not track.is_confirmed() or track.time_since_update > 1:
-                continue
-            bbox = track.to_tlbr()
-            # left top right bottom
-            results.append([
-                frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])
+        # for track in tracker.tracks:
+        #     if not track.is_confirmed() or track.time_since_update > 1:
+        #         continue
+        #     bbox = track.to_tlbr()
+        #     # left top right bottom
+        #     results.append([
+        #         frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])
 
     # Run tracker.
     if display:
         visualizer = visualization.Visualization(seq_info, update_ms=5)
+        visualizer.viewer.enable_videowriter("detection_only.avi", fps=30)
     else:
         visualizer = visualization.NoVisualization(seq_info)
     visualizer.run(frame_callback)
 
     # Store results.
-    f = open(output_file, 'w')
-    for row in results:
-        # if not loading_groundtruth and eval_3d is True and(t_data.X==-1000 or t_data.Y==-1000 or t_data.Z==-1000):
-        #
-        # print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
-        #     row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
-        # KITTI_LABEL = ["frame", "track_id", "class_name", "truncated",
-        #                "occluded", "alpha", "bbox_l", "bbox_t",
-        #                "bbox_r", "bbox_b", "hdim", "wdim",
-        #                "ldim", "locx", "locy", "locz", "rot_y"]
-        if 0:
-            # continue
-            print('%d %d Pedestrian 0 0 0 %.2f %.2f %.2f %.2f 0 0 0 -1000 -1000 -1000 0' % (
-                row[0], row[1], row[2], row[3], row[4], row[5]), file=f)
-        else:
-            print('%d %d Car 0 0 0 %.2f %.2f %.2f %.2f 0 0 0 -1000 -1000 -1000 0' % (
-                row[0], row[1], row[2], row[3], row[4], row[5]), file=f)
+
+    # f = open(output_file, 'w')
+    # for row in results:
+    #     # if not loading_groundtruth and eval_3d is True and(t_data.X==-1000 or t_data.Y==-1000 or t_data.Z==-1000):
+    #     #
+    #     # print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
+    #     #     row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
+    #     # KITTI_LABEL = ["frame", "track_id", "class_name", "truncated",
+    #     #                "occluded", "alpha", "bbox_l", "bbox_t",
+    #     #                "bbox_r", "bbox_b", "hdim", "wdim",
+    #     #                "ldim", "locx", "locy", "locz", "rot_y"]
+    #     if 0:
+    #         # continue
+    #         print('%d %d Pedestrian 0 0 0 %.2f %.2f %.2f %.2f 0 0 0 -1000 -1000 -1000 0' % (
+    #             row[0], row[1], row[2], row[3], row[4], row[5]), file=f)
+    #     else:
+    #         print('%d %d Car 0 0 0 %.2f %.2f %.2f %.2f 0 0 0 -1000 -1000 -1000 0' % (
+    #             row[0], row[1], row[2], row[3], row[4], row[5]), file=f)
 
 def bool_string(input_string):
     if input_string not in {"True","False"}:
