@@ -1,4 +1,4 @@
-## python wrapper for darknet
+## python wrapper for detector
 
 from ctypes import *
 import math
@@ -6,6 +6,7 @@ import random
 import os
 import cv2
 from deep_sort.detection import Detection
+from detector.PseudoDetector import PseudoDetector
 
 def sample(probs):
     s = sum(probs)
@@ -49,12 +50,12 @@ class METADATA(Structure):
 
 
 
-#lib = CDLL("/home/pjreddie/documents/darknet/libdarknet.so", RTLD_GLOBAL)
+#lib = CDLL("/home/pjreddie/documents/detector/libdarknet.so", RTLD_GLOBAL)
 #lib = CDLL("libdarknet.so", RTLD_GLOBAL)
 hasGPU = True
 
-class Detector(object):
-    def __init__(self, configPath, weightPath, metaPath, sharelibPath, gpu_num=0):
+class Detector(PseudoDetector):
+    def __init__(self, configPath, weightPath, metaPath, sharelibPath, fromFile, detFile, gpu_num=0):
         """Generate detections results from image.
 
             Parameters
@@ -62,13 +63,14 @@ class Detector(object):
             configPath : path to the cfg of yolo model
             weightPath : path to the weght of selected yolo model
             metaPath : path to the meta of selected yolo model
-            sharelibPath : path to the shared library of yolo ( compile darknet with USELIB=1
-            gpu_num : define which gpu darknet will run on
+            sharelibPath : path to the shared library of yolo ( compile detector with USELIB=1
+            gpu_num : define which gpu detector will run on
             Returns
             -------
                 List[([x,y,w,h],prob, class_id, class_name)]
                 Returns detection responses at given frame index.
         """
+        super().__init__(False, detFile)
         if os.name == "nt":
             raise Exception("Windows is not support")
         else:
@@ -190,7 +192,7 @@ class Detector(object):
         pass
         # self.free_image(self.darknet_image)
 
-    def detect_image(self, im, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
+    def detect_image(self, im, frameid, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
         # import cv2
         # custom_image_bgr = cv2.imread(image) # use: detect(,,imagePath,)
         # custom_image = cv2.cvtColor(custom_image_bgr, cv2.COLOR_BGR2RGB)
@@ -219,10 +221,10 @@ class Detector(object):
         if debug: print("about to range")
         class_range = range(self.metaMain.classes)
         if self.altNames is None:
-            res = [(self.metaMain.names[i], dets[j].prob[i], (dets[j].bbox.x, dets[j].bbox.y, dets[j].bbox.w, dets[j].bbox.h))
+            res = [(frameid, self.metaMain.names[i], dets[j].prob[i], (dets[j].bbox.x, dets[j].bbox.y, dets[j].bbox.w, dets[j].bbox.h))
                    for j in range(num) for i in class_range if dets[j].prob[i] > 0]
         else:
-            res = [(self.altNames[i], dets[j].prob[i], (dets[j].bbox.x, dets[j].bbox.y, dets[j].bbox.w, dets[j].bbox.h))
+            res = [(frameid, self.altNames[i], dets[j].prob[i], (dets[j].bbox.x, dets[j].bbox.y, dets[j].bbox.w, dets[j].bbox.h))
                    for j in range(num) for i in class_range if dets[j].prob[i] > 0]
 
         # we try to optimize the speed here
@@ -250,7 +252,7 @@ class Detector(object):
         if debug: print("freed detections")
         return res
 
-    def __call__(self, img, thresh=.5, hier_thresh=.5, nms=.45):
+    def __call__(self, img, frameid, thresh=.5, hier_thresh=.5, nms=.45):
 
         # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # frame_resized = cv2.resize(img,
@@ -284,16 +286,17 @@ class Detector(object):
         class_range = range(self.metaMain.classes)
         # res format: [([x,y,w,h],prob, class_id, class_name)]
         if self.altNames is None:
-            res = [([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
-                             dets[j].prob[i], i, self.metaMain.names[i])
+            res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h,
+                             dets[j].prob[i], i, -1, -1, self.metaMain.names[i])
                    for j in range(num) for i in class_range if dets[j].prob[i] > 0]
         else:
-            res = [([dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h],
-                             dets[j].prob[i], i, self.altNames[i])
+            res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h,
+                             dets[j].prob[i], i, -1, -1, self.altNames[i])
                    for j in range(num) for i in class_range if dets[j].prob[i] > 0]
 
         self.free_detections(dets, num)
 
         self.free_image(darknet_image)
 
+        self._detections_list.extend(res)
         return res

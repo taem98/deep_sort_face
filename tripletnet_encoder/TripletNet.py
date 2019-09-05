@@ -3,13 +3,9 @@ from tripletnet_encoder import *
 
 class TripletNet(object):
 
-    def __init__(self, checkpoint_filename, gpu_num = 0):
-        config = tf.ConfigProto()
-        # config.gpu_options.per_process_gpu_memory_fraction = 0.1
-        config.gpu_options.visible_device_list = str(gpu_num)
-        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+    def __init__(self, sess, checkpoint_filename):
 
-        self.session = tf.Session(config=config)
+        self.session = sess
         with tf.gfile.GFile(checkpoint_filename, "rb") as file_handle:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(file_handle.read())
@@ -36,6 +32,3 @@ class TripletNet(object):
             lambda x: self.session.run(self.output_var, feed_dict=x),
             {self.input_var: data_x}, out, batch_size)
         return out
-
-    def __del__(self):
-        self.session.close()
