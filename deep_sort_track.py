@@ -16,8 +16,9 @@ from deep_sort.tracker import Tracker
 from detector.DarknetDetector import Detector
 from detector.PseudoDetector import PseudoDetector, NoneDetector
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
-from tripletnet_encoder import extract_image_patch
-from tripletnet_encoder.TripletNet import TripletNet
+from encoder import extract_image_patch
+from encoder.TripletNet import TripletNet
+from encoder.PseudoEncoder import PseudoEncoder
 import pathlib
 import tensorflow as tf
 
@@ -29,7 +30,7 @@ def create_box_encoder(sess, model_filename, class_filter, batch_size=32):
         image_patches = []
         image_patches_id = []
         for idx, detect in enumerate(detect_res):
-            if detect[8] in class_filter:
+            if detect[7] in class_filter:
                 patch = extract_image_patch(image, detect[2:6], image_shape[:2])
                 if patch is None:
                     print("WARNING: Failed to extract image patch: %s." % str(detect[2:6]))
@@ -44,7 +45,7 @@ def create_box_encoder(sess, model_filename, class_filter, batch_size=32):
         #                detect_res[id][1][0], detect_res[id][1][1], detect_res[id][1][2], detect_res[id][1][3],
         #                detect_res[id][2], detect_res[id][3], -1, -1, features[idx])
         #               for idx, id in enumerate(image_patches_id)]
-        detections = [np.r_[detect_res[id][0:8], (-1, -1) , features[idx]] for idx, id in enumerate(image_patches_id)]
+        detections = [np.r_[detect_res[id][0:10], features[idx]] for idx, id in enumerate(image_patches_id)]
         # detections = [Detection(detect_res[id][0], detect_res[id][1], features[idx], detect_res[id][3]) for idx, id in enumerate(image_patches_id)]
         return detections
 
@@ -204,11 +205,13 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         If True, show visualization of intermediate tracking results.
 
     """
-    running_name = "this_run"
-    running_cfg = "track" # there will be 3 mode: run from from_detect, from_encoded or track
-
-    encoded_detection_file = os.path.join(detections_dir, sequence_name + ".npy")
-
+    enable_video = True
+    running_name = "msis_tracking_dataset_2"
+    running_cfg = "from_encoded" # there will be 3 mode: run from from_detect, from_encoded or track
+    running_cfg = "from_detect"
+    # running_cfg = "track"
+    # encoded_detection_file = os.path.join(detections_dir, sequence_name + ".npy")
+    detection_file = None  # we set
     if running_cfg == "from_detect":
         print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
         cfg_path = "../alex_darknet/cfg/yolov3.cfg"
@@ -222,65 +225,58 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         config.gpu_options.visible_device_list = str(0)
         config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
         sess = tf.Session(config=config)
-        encoder = create_box_encoder(sess,
-                                     "/home/msis_member/Project/triplet-reid/experiment/VeRi/run3/encoder_trinet.pb",
-                                     class_filter=['car', 'truck', 'bus'])
-        detection_file = None  # we set
+        frozen_ckpt = "/home/msis_member/Project/triplet-reid/experiment/VeRi/run3/encoder_trinet.pb"
+        class_filter = [2, 5, 7]
+        encoder = TripletNet(sess, frozen_ckpt, class_filter)
+
 
     # if (os.path.exists(encoded_detection_file)):
-    result_folder = os.path.join("result", running_name)
-    for sequence in os.listdir(dataset_dir):
-        if os.path.isdir(sequence):
-            from detector.PseudoDetector import PseudoDetector
-            sequence_dir = os.path.join(dataset_dir, sequence)
+    specific_sequence = "video6"
+    specific_sequence =""
+    result_folder = os.path.join("results", running_name)
+    raw_detections_dir = os.path.join(result_folder, "raw_detections")
+    detections_dir = os.path.join(result_folder, "detections")
+    track_dir = os.path.join(result_folder, "tracks")
+    video_dir = os.path.join(result_folder, "video")
+    os.makedirs(raw_detections_dir, exist_ok=True)
+    os.makedirs(detections_dir, exist_ok=True)
+    os.makedirs(track_dir, exist_ok=True)
+    os.makedirs(video_dir, exist_ok=True)
 
-            raw_detections_dir = os.path.join(result_folder, sequence, "raw_detections")
-            detections_dir = os.path.join(result_folder, sequence, "detections")
-            track_dir = os.path.join(result_folder, sequence, "tracks")
-            os.makedirs(raw_detections_dir, exist_ok=True)
-            os.makedirs(detections_dir, exist_ok=True)
-            os.makedirs(track_dir, exist_ok=True)
+    for sequence in os.listdir(dataset_dir):
+        if len(specific_sequence) > 0 and sequence != specific_sequence:
+            continue
+        sequence_dir = os.path.join(dataset_dir, sequence)
+        if os.path.isdir(sequence_dir):
             if running_cfg == "from_encoded":
                 raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % sequence)
-                detector = PseudoDetector(fromFile=True, detFile=raw_detections_file)
+                detector = PseudoDetector(detFile=raw_detections_file)
             elif running_cfg == "track":
                 detector = NoneDetector()
                 detection_file = os.path.join(detections_dir, "%s.npy" % sequence)
-            seq_info = gather_sequence_info(sequence_dir, detection_file)
+                encoder = PseudoEncoder(detection_file, True)
+
+            seq_info = gather_sequence_info(sequence_dir, None)
 
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "euclidean", max_cosine_distance, nn_budget)
             tracker = Tracker(metric)
             # results = []
-            encoded_detections = []
             def frame_callback(vis, frame_idx):
                 print("Processing frame %05d" % frame_idx)
                 _t0 = time.time()
                 image = cv2.imread(
                     seq_info["image_filenames"][frame_idx], cv2.IMREAD_COLOR)
-                # Load image and generate detections.
-                # detections = None
 
-                if seq_info["detections"] is not None:
-                    detections = create_detections(
-                        seq_info["detections"], frame_idx, min_detection_height)
-                else:
-                #     we generate the detection file here
-                    try:
-                        _t0 = time.time()
-                        # detections = detector(seq_info["image_filenames"][frame_idx])
-                        detect_raws = detector(image, frame_idx, thresh=0.5)
-                        _t1 = time.time() - _t0
-                        # bbxs = [d[0] for d in detect_res if d[1] >= min_confidence and d[3] == "car" or d[3] == "truck" or d[3] == "bus"]
-                        detection_n_feature = encoder(image, detect_raws)
-                        encoded_detections.extend(detection_n_feature)
-                        # np_detections =
+                _t0 = time.time()
+                # detections = detector(seq_info["image_filenames"][frame_idx])
+                raw_detections = detector(image, frame_idx)
+                _t1 = time.time() - _t0
+                # bbxs = [d[0] for d in detect_res if d[1] >= min_confidence and d[3] == "car" or d[3] == "truck" or d[3] == "bus"]
+                detections = encoder(image, raw_detections, frame_idx)
+                # np_detections =
+                # detections = create_detections(np.asarray(detection_n_feature), frame_idx, min_detection_height)
 
-                        detections = create_detections(np.asarray(detection_n_feature), frame_idx, min_detection_height)
-
-                    except Exception:
-                        print("Exception")
-                        return
                 detections = [d for d in detections if d.confidence >= min_confidence]
 
                 # Run non-maxima suppression.
@@ -313,7 +309,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
             # Run tracker.
             if display:
                 visualizer = visualization.Visualization(seq_info, update_ms=5)
-                visualizer.viewer.enable_videowriter("detection_with_track.avi", fps=5)
+                visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:
                 visualizer = visualization.NoVisualization(seq_info)
             try:
@@ -321,11 +317,12 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
             except Exception as e:
                 print(e)
             finally:
-                detector.save(raw_detections_dir)
+                detector.save(raw_detections_dir, sequence)
+                encoder.save(detections_dir, sequence)
                 # raw_detections_np = np.asarray(raw_detections)
                 # np.savetxt(os.join.path(raw_detections_dir, "") raw_detections_np, )
-
-            sess.close()
+    if running_cfg == "from_detect" or running_cfg == "from_encoded":
+        sess.close()
     # Store results.
 
     # f = open(output_file, 'w')

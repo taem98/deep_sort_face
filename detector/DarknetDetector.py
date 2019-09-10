@@ -55,7 +55,7 @@ class METADATA(Structure):
 hasGPU = True
 
 class Detector(PseudoDetector):
-    def __init__(self, configPath, weightPath, metaPath, sharelibPath, fromFile, detFile, gpu_num=0):
+    def __init__(self, configPath, weightPath, metaPath, sharelibPath, gpu_num=0):
         """Generate detections results from image.
 
             Parameters
@@ -70,7 +70,8 @@ class Detector(PseudoDetector):
                 List[([x,y,w,h],prob, class_id, class_name)]
                 Returns detection responses at given frame index.
         """
-        super().__init__(False, detFile)
+        super().__init__(False, None)
+        self._from_file = False
         if os.name == "nt":
             raise Exception("Windows is not support")
         else:
@@ -285,18 +286,19 @@ class Detector(PseudoDetector):
         # if debug: print("about to range")
         class_range = range(self.metaMain.classes)
         # res format: [([x,y,w,h],prob, class_id, class_name)]
-        if self.altNames is None:
-            res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h,
-                             dets[j].prob[i], i, -1, -1, self.metaMain.names[i])
-                   for j in range(num) for i in class_range if dets[j].prob[i] > 0]
-        else:
-            res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h,
-                             dets[j].prob[i], i, -1, -1, self.altNames[i])
-                   for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+        # if self.altNames is None:
+        #     res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h,
+        #                      dets[j].prob[i], i, -1, -1, self.metaMain.names[i])
+        #            for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+        # else:
+        #     res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w, dets[j].bbox.h,
+        #                      dets[j].prob[i], i, -1, -1, self.altNames[i])
+        #            for j in range(num) for i in class_range if dets[j].prob[i] > 0]
+        # ignore the class name, only take class ID
+        res = [(frameid, -1, dets[j].bbox.x - dets[j].bbox.w / 2, dets[j].bbox.y - dets[j].bbox.h / 2, dets[j].bbox.w,
+                dets[j].bbox.h, dets[j].prob[i], i, -1, -1) for j in range(num) for i in class_range if dets[j].prob[i] > 0]
 
         self.free_detections(dets, num)
-
         self.free_image(darknet_image)
-
         self._detections_list.extend(res)
         return res

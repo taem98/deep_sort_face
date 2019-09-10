@@ -1,0 +1,48 @@
+import os
+import numpy as np
+
+from deep_sort.detection import Detection
+
+class PseudoEncoder(object):
+    def __init__(self, detFile, fromFile, altName=None):
+        self._from_file = fromFile
+        self._detections_list = []
+        self._altName=altName
+        if self._from_file:
+            if not os.path.isfile(detFile):
+                raise FileNotFoundError("Can not found detection file")
+            self._raw_detection = np.load(detFile)
+            # print(self._raw_detection[0,"frame_id"])
+            self._frame_indices = self._raw_detection[:, 0].astype(np.int)
+
+    def __call__(self, image, raw_detections, frame_id):
+
+        res = []
+        if self._from_file:
+            mask = self._frame_indices == frame_id
+            rows = self._raw_detection[mask]
+        else:
+            rows = raw_detections
+            self._detections_list.extend(rows)
+
+        for row in rows:
+            if self._altName:
+                bbox, confidence, feature, label = row[2:6], row[6], row[10:], self._altName[row[7]]
+            else:
+                bbox, confidence, feature, label = row[2:6], row[6], row[10:], row[7]
+            res.append(Detection(bbox, confidence, feature, label))
+        return res
+
+    def save(self, output_dir, sequence):
+        if not self._from_file:
+            # detections = self._detections_list[0:9]
+            # np_arr = np.asarray(self._detections_list, dtype=self._dtype)
+            np_arr = np.asarray(self._detections_list, dtype=np.float32)
+            output_filename = os.path.join(output_dir, "%s.npy" % sequence)
+            # output_txtname = os.path.join(output_dir, "%s.txt" % sequence)
+            np.save(output_filename, np_arr, allow_pickle=False)
+            # np.savetxt(output_txtname, np_arr, fmt='%4.2f')
+            # with open(output_txtname, 'w', newline='') as f:
+            #     wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+            #     wr.writerow(self._detections_list)
+            self._detections_list = []
