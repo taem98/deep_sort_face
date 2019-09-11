@@ -21,6 +21,7 @@ from encoder.TripletNet import TripletNet
 from encoder.PseudoEncoder import PseudoEncoder
 import pathlib
 import tensorflow as tf
+from evaluator.Evaluator import Evaluator
 
 def create_box_encoder(sess, model_filename, class_filter, batch_size=32):
     image_encoder = TripletNet(sess, model_filename)
@@ -205,13 +206,17 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         If True, show visualization of intermediate tracking results.
 
     """
+
+
     enable_video = True
-    running_name = "msis_tracking_dataset_2"
+    running_name = "msis_tracking_dataset"
     running_cfg = "from_encoded" # there will be 3 mode: run from from_detect, from_encoded or track
     running_cfg = "from_detect"
-    # running_cfg = "track"
+    running_cfg = "track"
     # encoded_detection_file = os.path.join(detections_dir, sequence_name + ".npy")
+    evaluator = Evaluator()
     detection_file = None  # we set
+
     if running_cfg == "from_detect":
         print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
         cfg_path = "../alex_darknet/cfg/yolov3.cfg"
@@ -262,6 +267,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
                 "euclidean", max_cosine_distance, nn_budget)
             tracker = Tracker(metric)
             # results = []
+
             def frame_callback(vis, frame_idx):
                 print("Processing frame %05d" % frame_idx)
                 _t0 = time.time()
@@ -298,13 +304,12 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
                     vis.draw_trackers(tracker.tracks)
                 # print(seq_info["detections"][frame_idx][7])
                 # Store results.
-                # for track in tracker.tracks:
-                #     if not track.is_confirmed() or track.time_since_update > 1:
-                #         continue
-                #     bbox = track.to_tlbr()
-                #     # left top right bottom
-                #     results.append([
-                #         frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])
+                for track in tracker.tracks:
+                    if not track.is_confirmed() or track.time_since_update > 1:
+                        continue
+                    bbox = track.to_tlbr()
+                    evaluator.append(frame_idx, track.track_id, bbox, "Car")
+                    # left top right bottom
 
             # Run tracker.
             if display:
@@ -319,6 +324,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
             finally:
                 detector.save(raw_detections_dir, sequence)
                 encoder.save(detections_dir, sequence)
+                evaluator.save(result_folder, sequence)
                 # raw_detections_np = np.asarray(raw_detections)
                 # np.savetxt(os.join.path(raw_detections_dir, "") raw_detections_np, )
     if running_cfg == "from_detect" or running_cfg == "from_encoded":
