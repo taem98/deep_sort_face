@@ -57,12 +57,11 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
 
     """
 
-
     enable_video = True
-    running_name = "msis_tracking_dataset_2"
-    running_cfg = "from_encoded" # there will be 3 mode: run from from_detect, from_encoded or track
+    running_name = "msis_tracking_video"
+    running_cfg = "from_encoded"  # there will be 3 mode: run from from_detect, from_encoded or track
     running_cfg = "from_detect"
-    # running_cfg = "track"
+    running_cfg = "track"
     # encoded_detection_file = os.path.join(detections_dir, sequence_name + ".npy")
     evaluator = Evaluator()
     detection_file = None  # we set
@@ -85,7 +84,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         encoder = TripletNet(sess, frozen_ckpt, class_filter)
 
     # if (os.path.exists(encoded_detection_file)):
-    specific_sequence = "video6"
+    specific_sequence = "20190808-13h26m21s_F_E.mp4"
     # specific_sequence =""
     result_folder = os.path.join("results", running_name)
     raw_detections_dir = os.path.join(result_folder, "raw_detections")
@@ -101,10 +100,11 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         if len(specific_sequence) > 0 and sequence != specific_sequence:
             continue
         sequence_dir = os.path.join(dataset_dir, sequence)
-        if os.path.isdir(sequence_dir):
+        if os.path.isfile(sequence_dir):
             if running_cfg == "from_encoded":
                 raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % sequence)
                 detector = PseudoDetector(detFile=raw_detections_file)
+
             elif running_cfg == "track":
                 detector = NoneDetector()
                 detection_file = os.path.join(detections_dir, "%s.npy" % sequence)
@@ -113,6 +113,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "euclidean", max_cosine_distance, nn_budget)
             tracker = Tracker(metric)
+
             # results = []
 
             def frame_callback(vis, frame, frame_idx):
@@ -130,7 +131,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
                 boxes = np.array([d.tlwh for d in detections])
                 scores = np.array([d.confidence for d in detections])
                 indices = preprocessing.non_max_suppression(
-                                        boxes, nms_max_overlap, scores)
+                    boxes, nms_max_overlap, scores)
                 detections = [detections[i] for i in indices]
 
                 # Update tracker.
@@ -140,7 +141,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
                 # Update visualization.
                 if display:
                     vis.set_image(frame.copy())
-                    vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1/_t1, 1/_t2))
+                    vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
                     vis.draw_detections(detections)
                     vis.draw_trackers(tracker.tracks)
                 # print(seq_info["detections"][frame_idx][7])
@@ -154,7 +155,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
 
             # Run tracker.
             if display:
-                visualizer = ImageLoader(sequence_dir, 5)
+                visualizer = VideoLoader(sequence_dir, 5)
                 # visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:
                 visualizer = visualization.NoVisualization(None)
@@ -173,11 +174,13 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         sess.close()
     # Store results.
 
+
 def bool_string(input_string):
-    if input_string not in {"True","False"}:
+    if input_string not in {"True", "False"}:
         raise ValueError("Please Enter a valid Ture/False choice")
     else:
         return (input_string == "True")
+
 
 def parse_args():
     """ Parse command line arguments.
@@ -185,32 +188,32 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Deep SORT")
     parser.add_argument(
         "--sequence_dir", help="Path to MOTChallenge sequence directory",
-        default=r"/media/msis_dasol/1TB/dataset/test/MOT16-06", required=True)
+        default=r"/home/msis_member/datasets/msis_tracking_video/", required=False)
     parser.add_argument(
         "--detection_file", help="Path to custom detections.",
         default=r"/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test",
-        required=True)
+        required=False)
     parser.add_argument(
         "--output_file", help="Path to the tracking output file. This file will"
-        " contain the tracking results on completion.",
+                              " contain the tracking results on completion.",
         default="./hypotheses_euclidean.txt")
     parser.add_argument(
         "--min_confidence", help="Detection confidence threshold. Disregard "
-        "all detections that have a confidence lower than this value.",
+                                 "all detections that have a confidence lower than this value.",
         default=0.3, type=float)
     parser.add_argument(
         "--min_detection_height", help="Threshold on the detection bounding "
-        "box height. Detections with height smaller than this value are "
-        "disregarded", default=0, type=int)
+                                       "box height. Detections with height smaller than this value are "
+                                       "disregarded", default=0, type=int)
     parser.add_argument(
-        "--nms_max_overlap",  help="Non-maxima suppression threshold: Maximum "
-        "detection overlap.", default=1.0, type=float)
+        "--nms_max_overlap", help="Non-maxima suppression threshold: Maximum "
+                                  "detection overlap.", default=1.0, type=float)
     parser.add_argument(
         "--max_cosine_distance", help="Gating threshold for cosine distance "
-        "metric (object appearance).", type=float, default=0.2)
+                                      "metric (object appearance).", type=float, default=0.2)
     parser.add_argument(
         "--nn_budget", help="Maximum size of the appearance descriptors "
-        "gallery. If None, no budget is enforced.", type=int, default=100)
+                            "gallery. If None, no budget is enforced.", type=int, default=100)
     parser.add_argument(
         "--display", help="Show intermediate tracking results",
         default=True, type=bool_string)
