@@ -4,8 +4,6 @@ from __future__ import division, print_function, absolute_import
 import argparse
 import os
 import time
-
-import cv2
 import numpy as np
 
 from application_util import preprocessing
@@ -17,13 +15,11 @@ from detector.DarknetDetector import Detector
 from detector.PseudoDetector import PseudoDetector, NoneDetector
 from visualizer.VideoLoader import VideoLoader, ImageLoader
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
-from encoder import extract_image_patch
 from encoder.TripletNet import TripletNet
 from encoder.PseudoEncoder import PseudoEncoder
-import pathlib
 import tensorflow as tf
 from evaluator.Evaluator import Evaluator
-
+from embeddingIO.FeatureExchange import *
 
 def run(dataset_dir, detection_file, output_file, min_confidence,
         nms_max_overlap, min_detection_height, max_cosine_distance,
@@ -59,10 +55,10 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
 
 
     enable_video = True
-    running_name = "msis_tracking_dataset_2"
+    running_name = "msis_tracking_dataset"
     running_cfg = "from_encoded" # there will be 3 mode: run from from_detect, from_encoded or track
     running_cfg = "from_detect"
-    # running_cfg = "track"
+    running_cfg = "track"
     # encoded_detection_file = os.path.join(detections_dir, sequence_name + ".npy")
     evaluator = Evaluator()
     detection_file = None  # we set
@@ -113,15 +109,25 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "euclidean", max_cosine_distance, nn_budget)
             tracker = Tracker(metric)
-            # results = []
 
+            # init the features exchange server
+
+            # class
+            server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+            embserver = EmbeddingsServing(tracker.tracks, encoder.get_detections())
+            add_EmbServerServicer_to_server(embserver, server)
+            # .add_GreeterServicer_to_server(self.embserver, self.server)
+            server.add_insecure_port('[::]:50051')
+            server.start()
+            # results = []
+            # start the server
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
+
                 _t0 = time.time()
-                # detections = detector(seq_info["image_filenames"][frame_idx])
                 raw_detections = detector(frame, frame_idx)
                 _t1 = time.time() - _t0
-                # bbxs = [d[0] for d in detect_res if d[1] >= min_confidence and d[3] == "car" or d[3] == "truck" or d[3] == "bus"]
+
                 detections = encoder(frame, raw_detections, frame_idx)
 
                 detections = [d for d in detections if d.confidence >= min_confidence]
@@ -167,6 +173,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
                 detector.save(raw_detections_dir, sequence)
                 encoder.save(detections_dir, sequence)
                 evaluator.save(result_folder, sequence)
+                server.stop(1)
                 # raw_detections_np = np.asarray(raw_detections)
                 # np.savetxt(os.join.path(raw_detections_dir, "") raw_detections_np, )
     if running_cfg == "from_detect" or running_cfg == "from_encoded":

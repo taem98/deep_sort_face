@@ -1,0 +1,32 @@
+syntax = "proto2";
+
+package EmbExchange;
+
+service EmbServer {
+    rpc getPayload(request) returns (payloads) {}
+}
+
+message request {
+    required uint32 requestid = 1;
+}
+
+message bbox {
+    required uint32 top = 1;
+    required uint32 left = 2;
+    required uint32 bot = 3;
+    required uint32 right = 4;
+}
+
+message embeddings {
+    required uint32 id = 1;
+    repeated double weight = 2 [packed=true];
+    required double confidence = 3;
+    required uint32 labelid = 4;
+}
+
+message payloads {
+    required uint32 carid = 1;
+    repeated embeddings embs = 2;
+    required uint32 embs_num = 3;
+    required uint32 time = 4;
+}

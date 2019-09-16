@@ -60,8 +60,8 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
     enable_video = True
     running_name = "msis_tracking_video"
     running_cfg = "from_encoded"  # there will be 3 mode: run from from_detect, from_encoded or track
-    running_cfg = "from_detect"
-    running_cfg = "track"
+    # running_cfg = "from_detect"
+    # running_cfg = "track"
     # encoded_detection_file = os.path.join(detections_dir, sequence_name + ".npy")
     evaluator = Evaluator()
     detection_file = None  # we set
@@ -84,8 +84,8 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
         encoder = TripletNet(sess, frozen_ckpt, class_filter)
 
     # if (os.path.exists(encoded_detection_file)):
-    specific_sequence = "20190808-13h26m21s_F_E.mp4"
-    # specific_sequence =""
+    # specific_sequence = "20190808-13h26m21s_F_E.mp4"
+    specific_sequence =""
     result_folder = os.path.join("results", running_name)
     raw_detections_dir = os.path.join(result_folder, "raw_detections")
     detections_dir = os.path.join(result_folder, "detections")
@@ -155,7 +155,7 @@ def run(dataset_dir, detection_file, output_file, min_confidence,
 
             # Run tracker.
             if display:
-                visualizer = VideoLoader(sequence_dir, 5)
+                visualizer = VideoLoader(sequence_dir, 30)
                 # visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:
                 visualizer = visualization.NoVisualization(None)

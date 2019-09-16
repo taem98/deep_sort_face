@@ -8,6 +8,7 @@ class PseudoEncoder(object):
         self._from_file = fromFile
         self._detections_list = []
         self._altName=altName
+        self._detection_id = 0
         if self._from_file:
             if not os.path.isfile(detFile):
                 raise FileNotFoundError("Can not found detection file")
@@ -15,8 +16,24 @@ class PseudoEncoder(object):
             # print(self._raw_detection[0,"frame_id"])
             self._frame_indices = self._raw_detection[:, 0].astype(np.int)
 
-    def __call__(self, image, raw_detections, frame_id):
+    # def get_detection(self, idx, trackid):
+    #     if self._from_file:
+    #         return self._raw_detection[idx]
+    #     else:
+    #         return  self._detections_list[idx]
+    #
+    def get_detections(self, ):
+        if self._from_file:
+            return self._raw_detection
+        else:
+            return self._detections_list
 
+    def __call__(self, image, raw_detections, frame_id):
+        '''
+        in here we need to mark the detection with index to retrieve the confirm track
+        since tracker may remove the feature after the track is confirm
+        but we might need to change it later
+        '''
         res = []
         if self._from_file:
             mask = self._frame_indices == frame_id
@@ -30,7 +47,8 @@ class PseudoEncoder(object):
                 bbox, confidence, feature, label = row[2:6], row[6], row[10:], self._altName[row[7]]
             else:
                 bbox, confidence, feature, label = row[2:6], row[6], row[10:], row[7]
-            res.append(Detection(bbox, confidence, feature, label))
+            res.append(Detection(bbox, confidence, feature, label, self._detection_id))
+            self._detection_id += 1
         return res
 
     def save(self, output_dir, sequence):

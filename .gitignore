@@ -93,3 +93,6 @@ tmp/
 results/
 .idea/
 
+# protobuf file
+*.pb*
+
