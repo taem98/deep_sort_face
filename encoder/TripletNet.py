@@ -36,6 +36,12 @@ class TripletNet(PseudoEncoder):
             {self.input_var: data_x}, out, batch_size)
         return out
 
+    def __del__(self):
+        try:
+            self.session.close()
+        except Exception:
+            pass
+
     def __call__(self, image, raw_detections, frame_id):
         image_patches = []
         image_patches_id = []
