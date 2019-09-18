@@ -14,7 +14,7 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from detector.DarknetDetector import Detector
 from detector.PseudoDetector import PseudoDetector, NoneDetector
-from visualizer.VideoLoader import VideoLoader, ImageLoader
+from visualizer.VideoLoader import VideoLoader, ImageLoader, NdImageLoader
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
 from encoder.TripletNet import TripletNet
 from encoder.PseudoEncoder import PseudoEncoder
@@ -130,7 +130,7 @@ def run(args):
                 if args.save_video:
                     visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:
-                visualizer = visualization.NoVisualization(None)
+                visualizer = NdImageLoader(sequence_dir)
 
             try:
                 visualizer.run(frame_callback)

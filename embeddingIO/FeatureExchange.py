@@ -31,6 +31,7 @@ class EmbeddingsServing(EmbServerServicer):
                 emb = pl.embs.add()
                 emb.id = track.track_id
                 detection = self.detections[track.detection_id]
+                emb.frame_time = detection[0]
                 emb.confidence = detection[6]
                 emb.labelid = int(detection[7])
                 for element in detection[10:]:

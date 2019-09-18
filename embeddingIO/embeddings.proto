@@ -22,6 +22,7 @@ message embeddings {
     repeated double weight = 2 [packed=true];
     required double confidence = 3;
     required uint32 labelid = 4;
+    required uint32 frame_time = 5; // frame time
 }
 
 message payloads {

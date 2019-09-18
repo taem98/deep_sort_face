@@ -35,6 +35,9 @@ class Evaluator(object):
         self._results.append([frameid, trackid, label, bbox[0], bbox[1], bbox[2], bbox[3]])
 
     def save(self, output_dir, sequence):
+        if len(self._results) == 0:
+            # append the first DontCare row incase there is no result in the frame
+            self._results.append([0, 0, "DontCare", 0, 0, 0, 0])
         kitti_eval_dir = os.path.join(output_dir, "data")
         os.makedirs(kitti_eval_dir, exist_ok=True)
 

@@ -1,4 +1,4 @@
-from visualizer.visualization import Visualization
+from visualizer.visualization import Visualization, NoVisualization
 import cv2
 import pathlib
 import os
@@ -85,3 +85,41 @@ class ImageLoader(Visualization):
         self.viewer.annotate(4, 50, "io_fps {:03.1f}".format(1 / _t1))
         self.frame_idx += 1
         return True
+
+
+class NdImageLoader(NoVisualization):
+    def __init__(self, image_dir):
+        self.image_filenames = {
+            int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
+            for f in os.listdir(image_dir)}
+
+        if len(self.image_filenames) > 0:
+            image = cv2.imread(next(iter(self.image_filenames.values())),
+                               cv2.IMREAD_GRAYSCALE)
+            image_size = image.shape
+        else:
+            image_size = None
+
+        if len(self.image_filenames) > 0:
+            min_frame_idx = min(self.image_filenames.keys())
+            max_frame_idx = max(self.image_filenames.keys())
+
+        else:
+            min_frame_idx = 0
+            max_frame_idx = 0
+
+        seq_info = {
+            "sequence_name": os.path.basename(image_dir),
+            # "groundtruth": groundtruth,
+            "image_size": image_size,
+            "min_frame_idx": min_frame_idx,
+            "max_frame_idx": max_frame_idx,
+            "update_ms": 0
+        }
+
+        super().__init__(seq_info)
+
+    def run(self, frame_callback):
+        while self.frame_idx <= self.last_idx:
+            frame_callback(self, None, self.frame_idx)
+            self.frame_idx += 1

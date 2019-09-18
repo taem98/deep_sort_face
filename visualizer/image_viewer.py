@@ -121,7 +121,7 @@ class ImageViewer(object):
             raise ValueError("color must be tuple of 3")
         self._color = tuple(int(c) for c in value)
 
-    def rectangle(self, x, y, w, h, label=None):
+    def rectangle(self, x, y, w, h, label=None, pos=0):
         """Draw a rectangle.
 
         Parameters
@@ -137,7 +137,8 @@ class ImageViewer(object):
         label : Optional[str]
             A text label that is placed at the top left corner of the
             rectangle.
-
+        pos : int
+            relative position in rectangle 0: top-left, 1: top-right, 2: bot-left, 3: bot-right
         """
         pt1 = int(x), int(y)
         pt2 = int(x + w), int(y + h)
@@ -145,11 +146,18 @@ class ImageViewer(object):
         if label is not None:
             text_size = cv2.getTextSize(
                 label, cv2.FONT_HERSHEY_PLAIN, 1, self.thickness)
+            if pos == 0:
+                center = pt1[0] + 5, pt1[1] + 5 + text_size[0][1]
+                label_pt1 = pt1
+                label_pt2 = pt1[0] + 10 + text_size[0][0], pt1[1] + 10 + \
+                      text_size[0][1]
+            elif pos == 1:
+                center = pt2[0] - text_size[0][0], pt1[1] + 5 + text_size[0][1]
+                label_pt1 = pt2[0], pt1[1]
+                label_pt2 = pt2[0] - 10 - text_size[0][0], pt1[1] + 10 + \
+                      text_size[0][1]
 
-            center = pt1[0] + 5, pt1[1] + 5 + text_size[0][1]
-            pt2 = pt1[0] + 10 + text_size[0][0], pt1[1] + 10 + \
-                text_size[0][1]
-            cv2.rectangle(self.image, pt1, pt2, self._color, -1)
+            cv2.rectangle(self.image, label_pt1, label_pt2, self._color, -1)
             cv2.putText(self.image, label, center, cv2.FONT_HERSHEY_PLAIN,
                         1, (255, 255, 255), self.thickness)
 
