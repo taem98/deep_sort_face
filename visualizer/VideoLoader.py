@@ -44,7 +44,7 @@ class VideoLoader(Visualization):
             return False
 
 class ImageLoader(Visualization):
-    def __init__(self, image_dir, update_ms):
+    def __init__(self, image_dir, update_ms, running_name=""):
         self.image_filenames = {
             int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
             for f in os.listdir(image_dir)}
@@ -65,7 +65,7 @@ class ImageLoader(Visualization):
             max_frame_idx = 0
 
         seq_info = {
-            "sequence_name": os.path.basename(image_dir),
+            "sequence_name": "{} {}".format(os.path.basename(image_dir), running_name) ,
             # "groundtruth": groundtruth,
             "image_size": image_size,
             "min_frame_idx": min_frame_idx,

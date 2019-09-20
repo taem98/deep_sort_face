@@ -28,6 +28,12 @@ class PseudoEncoder(object):
         else:
             return self._detections_list
 
+    def update_trackid(self, frameid, trackid):
+        if self._from_file:
+            self._raw_detection[frameid][1] = trackid
+        else:
+            self._detections_list[frameid][1] = trackid
+    
     def __call__(self, image, raw_detections, frame_id):
         '''
         in here we need to mark the detection with index to retrieve the confirm track

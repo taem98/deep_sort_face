@@ -22,6 +22,9 @@ import tensorflow as tf
 from evaluator.Evaluator import Evaluator
 from embeddingIO.FeatureExchange import *
 from tools.default_args import *
+from mctracker.mctracker import MultiCameraTracker
+
+
 def run(args):
 
     running_name = args.running_name
@@ -77,15 +80,15 @@ def run(args):
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "euclidean", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric)
-
+            mctracker = MultiCameraTracker("results/kitti_track_03/detections/0007.npy", metric, tracker)
             # init the features exchange server
             # class
-            server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-            embserver = EmbeddingsServing(tracker.tracks, encoder.get_detections())
-            add_EmbServerServicer_to_server(embserver, server)
-            # .add_GreeterServicer_to_server(self.embserver, self.server)
-            server.add_insecure_port(args.bind_addr)
-            server.start()
+            # server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+            # embserver = EmbeddingsServing(tracker.tracks, encoder.get_detections())
+            # add_EmbServerServicer_to_server(embserver, server)
+            # # .add_GreeterServicer_to_server(self.embserver, self.server)
+            # server.add_insecure_port(args.bind_addr)
+            # server.start()
 
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
@@ -114,19 +117,25 @@ def run(args):
                     vis.set_image(frame.copy())
                     vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1/_t1, 1/_t2))
                     vis.draw_detections(detections)
-                    vis.draw_trackers(tracker.tracks)
+
                 # print(seq_info["detections"][frame_idx][7])
                 # Store results.
+                # track_id list
                 for track in tracker.tracks:
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
                     bbox = track.to_tlbr()
                     evaluator.append(frame_idx, track.track_id, bbox, "Car")
-                    # left top right bottom
+                    encoder.update_trackid(track.detection_id, track.track_id)
 
+                    # left top right bottom
+                matching = mctracker.agrregate(frame_idx)
+
+                if args.display:
+                    vis.draw_trackers_with_othertag(tracker.tracks, matching)
             # Run tracker.
             if args.display:
-                visualizer = ImageLoader(sequence_dir, 5)
+                visualizer = ImageLoader(sequence_dir, 5, running_name)
                 if args.save_video:
                     visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:
@@ -135,13 +144,14 @@ def run(args):
             try:
                 visualizer.run(frame_callback)
             except Exception as e:
+                raise Exception("exception")
                 print(e)
 
             finally:
                 detector.save(raw_detections_dir, sequence)
                 encoder.save(detections_dir, sequence)
                 evaluator.save(result_folder, sequence)
-                server.stop(1)
+                # server.stop(1)
                 # raw_detections_np = np.asarray(raw_detections)
                 # np.savetxt(os.join.path(raw_detections_dir, "") raw_detections_np, )
     # Store results.

@@ -132,3 +132,15 @@ class Visualization(object):
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
             #                      label="%d" % track.track_id)
 #
+    def draw_trackers_with_othertag(self, tracks, matching):
+        self.viewer.thickness = 2
+        for track in tracks:
+            if not track.is_confirmed() or track.time_since_update > 0:
+                continue
+            label_str = "{}".format(track.track_id)
+            for idx, t in enumerate(matching):
+                if t[0] == track.track_id:
+                    label_str += ":{}".format(t[1])
+            self.viewer.color = create_unique_color_uchar(track.track_id)
+            self.viewer.rectangle(
+                *track.to_tlwh().astype(np.int), label=label_str)
