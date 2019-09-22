@@ -8,7 +8,7 @@ import numpy as np
 import json
 
 from application_util import preprocessing
-from application_util import visualization
+# from application_util import visualization
 from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
@@ -20,7 +20,7 @@ from encoder.TripletNet import TripletNet
 from encoder.PseudoEncoder import PseudoEncoder
 import tensorflow as tf
 from evaluator.Evaluator import Evaluator
-from embeddingIO.FeatureExchange import *
+# from embeddingIO.FeatureExchange import *
 from tools.default_args import *
 from mctracker.mctracker import MultiCameraTracker
 
@@ -80,7 +80,8 @@ def run(args):
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "euclidean", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric)
-            mctracker = MultiCameraTracker("results/kitti_track_03/detections/0007.npy", metric, tracker)
+            mctracker = MultiCameraTracker("results/kitti_track_03/detections/0007.npy", metric, tracker, encoder.get_detections(),
+                                           args.bind_addr, args.server_addr)
             # init the features exchange server
             # class
             # server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
@@ -129,6 +130,7 @@ def run(args):
                     encoder.update_trackid(track.detection_id, track.track_id)
 
                     # left top right bottom
+                mctracker.broadcastEmb()
                 matching = mctracker.agrregate(frame_idx)
 
                 if args.display:

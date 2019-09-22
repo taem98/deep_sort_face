@@ -3,7 +3,12 @@ syntax = "proto2";
 package EmbExchange;
 
 service EmbServer {
-    rpc getPayload(request) returns (payloads) {}
+    rpc sendPayload(payloads) returns (respond) {}
+//    rpc getPayload(request) returns (payloads) {}
+}
+
+message respond {
+    required uint32 respondid = 1;
 }
 
 message request {
