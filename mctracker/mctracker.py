@@ -7,6 +7,8 @@ import time
 from deep_sort.detection import Detection
 from queue import Queue
 
+# import imutils.video
+
 import grpc
 # this server should have the ability to create and mantain the server
 import os, sys
@@ -21,11 +23,15 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
     def sendPayload(self, request, context):
         # this method to handle Payload from client
         try:
+            if self.result_queue.full():
+                print("Queue full")
+                return embs_pb2.respond(respondid=2)
             for idx, emb in enumerate(request.embs):
                 weight = [d for d in emb.weight]
                 emb = np.asarray([emb.frame_time, emb.id, 0,0,0,0, emb.confidence, emb.labelid, -1, -1, ])
                 detection = np.r_[emb, np.asarray(weight)]
                 self.result_queue.put(detection)
+                # self.result_queue.task_done()
                 return embs_pb2.respond(respondid=1)
         except grpc.RpcContext as e:
             print("parsing message error")
@@ -51,19 +57,30 @@ class MultiCameraTracker:
         self.server_addr = server_addr
 
         self._queue_other_detections = Queue(maxsize=200)
-        self.server = grpc.server(ThreadPoolExecutor(max_workers=5))
-        self.emb_receiving_sever = EmbServer(self._queue_other_detections)
-        embs_pb2_grpc.add_EmbServerServicer_to_server(self.emb_receiving_sever, self.server)
+        if len(bind_addr) > 0:
+            self.server = grpc.server(ThreadPoolExecutor(max_workers=5))
+            self.emb_receiving_sever = EmbServer(self._queue_other_detections)
+            embs_pb2_grpc.add_EmbServerServicer_to_server(self.emb_receiving_sever, self.server)
         # embserver = EmbeddingsServing(tracker.tracks, encoder.get_detections())
         # # .add_GreeterServicer_to_server(self.embserver, self.server)
-        self.server.add_insecure_port(bind_addr)
-        self.server.start()
+            self.server.add_insecure_port(bind_addr)
+            self.server.start()
         # initiate
-
+        if len(self.server_addr) > 0:
+            self.client_channel = grpc.insecure_channel(self.server_addr)
+            self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
         # self._mc_detection
 
     def __del__(self):
-        self.server.stop(2)
+        try:
+            self.server.stop(2)
+        except Exception:
+            pass
+
+        try:
+            self.client_channel.close()
+        except Exception:
+            pass
 
     def broadcastEmb(self):
         '''
@@ -72,30 +89,37 @@ class MultiCameraTracker:
         '''
         # confirmed_tracks = [
         #     i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
-        with grpc.insecure_channel(self.server_addr) as channel:
-            stub = embs_pb2_grpc.EmbServerStub(channel)
-            payload = embs_pb2.payloads()
-            payload.carid = 0 # this id will be mark by simulation tool to ensure uniquely
-            payload.time = int(time.time())
-            # for idx, t in enumerate(self._single_tracker.tracks1):
-            total_object = 0
-            for track in self._single_tracker.tracks:
-                if not track.is_confirmed():
-                    continue
-                # bbox = track.to_tlbr()
-                emb = payload.embs.add()
-                emb.id = track.track_id
-                detection = self.detections[track.detection_id]
-                emb.frame_time = int(detection[0])
-                emb.confidence = detection[6]
-                emb.labelid = int(detection[7])
-                for element in detection[10:]:
-                    emb.weight.append(element)
-                total_object += 1
-            payload.embs_num = total_object
-            if total_object > 0:
-                respond = stub.sendPayload(payload)
+        _t0 = time.time()
+
+        payload = embs_pb2.payloads()
+        payload.carid = 0 # this id will be mark by simulation tool to ensure uniquely
+        payload.time = int(time.time())
+        # for idx, t in enumerate(self._single_tracker.tracks1):
+        total_object = 0
+        for track in self._single_tracker.tracks:
+            if not track.is_confirmed():
+                continue
+            # bbox = track.to_tlbr()
+            emb = payload.embs.add()
+            emb.id = track.track_id
+            detection = self.detections[track.detection_id]
+            emb.frame_time = int(detection[0])
+            emb.confidence = detection[6]
+            emb.labelid = int(detection[7])
+            for element in detection[10:]:
+                emb.weight.append(element)
+            total_object += 1
+        payload.embs_num = total_object
+
+        if total_object > 0:
+            try:
+                respond = self.client_stub.sendPayload(payload)
                 print(respond.respondid)
+                print("time {}".format(time.time() - _t0))
+            except Exception as e:
+                print("Send error")
+
+
     def agrregate(self, frame_id):
 
         def distance_metric(tracks, dets, track_indices, detection_indices):
