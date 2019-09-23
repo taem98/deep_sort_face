@@ -127,10 +127,9 @@ def run(args):
                         continue
                     bbox = track.to_tlbr()
                     evaluator.append(frame_idx, track.track_id, bbox, "Car")
-                    encoder.update_trackid(track.detection_id, track.track_id)
-
+                    mctracker.client_Q.put(encoder.update_trackid(track.detection_id, track.track_id))
                     # left top right bottom
-                mctracker.broadcastEmb()
+                # mctracker.broadcastEmb()
                 matching = mctracker.agrregate(frame_idx)
 
                 if args.display:

@@ -31,8 +31,10 @@ class PseudoEncoder(object):
     def update_trackid(self, frameid, trackid):
         if self._from_file:
             self._raw_detection[frameid][1] = trackid
+            return self._raw_detection[frameid]
         else:
             self._detections_list[frameid][1] = trackid
+            return self._detections_list[frameid]
     
     def __call__(self, image, raw_detections, frame_id):
         '''

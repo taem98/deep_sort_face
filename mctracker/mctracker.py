@@ -1,5 +1,6 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from threading import Thread
 from multiprocessing import Pool
 import numpy as np
 from deep_sort import linear_assignment
@@ -45,7 +46,7 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 # implement the tracker based on the previous running example from difference camera
 # we must change to socket connection later
 class MultiCameraTracker:
-    def __init__(self, detection_file, metric, single_tracker, detections, bind_addr, server_addr):
+    def __init__(self, detection_file, metric, single_tracker, detections, bind_addr, server_addr, client_mode = 1):
         self._single_tracker = single_tracker
         self.detections = detections
         if detection_file is not None:
@@ -66,16 +67,58 @@ class MultiCameraTracker:
             self.server.add_insecure_port(bind_addr)
             self.server.start()
         # initiate
+        self.client_Q = Queue(maxsize=200)
         if len(self.server_addr) > 0:
             self.client_channel = grpc.insecure_channel(self.server_addr)
             self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
+            self.client_stop = False
+            self.client_mode = client_mode
+            self.client_thread = Thread(target=self.send, args=())
+            self.client_thread.daemon = True
+            self.client_thread.start()
         # self._mc_detection
+
+    def send(self):
+        while True:
+            if self.client_stop:
+                break
+            total_object = 0
+            if not self.client_Q.empty():
+                _t0 = time.time()
+                detection = self.client_Q.get()
+                payload = embs_pb2.payloads()
+                payload.carid = 0  # this id will be mark by simulation tool to ensure uniquely
+                payload.time = int(time.time())
+                # for idx, t in enumerate(self._single_tracker.tracks1):
+                # bbox = track.to_tlbr()
+                emb = payload.embs.add()
+                # detection = self.detections[track.detection_id]
+                emb.frame_time = int(detection[0])
+                emb.id = int(detection[1])
+                emb.confidence = detection[6]
+                emb.labelid = int(detection[7])
+                for element in detection[10:]:
+                    emb.weight.append(element)
+                total_object += 1
+                payload.embs_num = total_object
+                try:
+                    respond = self.client_stub.sendPayload(payload)
+                    print(respond.respondid)
+                    print("time {}".format(time.time() - _t0))
+                    self.client_Q.task_done()
+                except Exception as e:
+                    print("Send error {}".format(e))
+            else:
+                time.sleep(0.1)
 
     def __del__(self):
         try:
             self.server.stop(2)
         except Exception:
             pass
+
+        self.client_stop = True
+        self.client_thread.join()
 
         try:
             self.client_channel.close()
