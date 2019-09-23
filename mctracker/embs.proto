@@ -4,6 +4,7 @@ package EmbExchange;
 
 service EmbServer {
     rpc sendPayload(payloads) returns (respond) {}
+    rpc sendCommand(command) returns (respond) {}
 //    rpc getPayload(request) returns (payloads) {}
 }
 
@@ -13,6 +14,14 @@ message respond {
 
 message request {
     required uint32 requestid = 1;
+}
+
+message command {
+    enum Command {
+        PAUSE = 0;
+        CONTINUE = 1;
+    }
+    required Command cmd = 1;
 }
 
 message bbox {

@@ -36,6 +36,12 @@ def parse_args():
         "--server_addr", help="address to connect to Embedding server",
         default="localhost:50051"
     )
+
+    parser.add_argument(
+        "--mc_mode", help="multiple camera tracker mode: 0: async, 1: sync master, 2: sync slave",
+        default=2
+    )
+
     parser.add_argument(
         "--min_confidence", help="Detection confidence threshold. Disregard "
         "all detections that have a confidence lower than this value.",
