@@ -29,8 +29,8 @@ def parse_args():
         default=""
     )
     parser.add_argument(
-        "--bind_addr", help="address to bind Embedding server",
-        default="[::]:50051"
+        "--bind_port", help="address to bind Embedding server",
+        default=50051, type=int
     )
     parser.add_argument(
         "--server_addr", help="address to connect to Embedding server",
@@ -39,7 +39,7 @@ def parse_args():
 
     parser.add_argument(
         "--mc_mode", help="multiple camera tracker mode: 0: async, 1: sync master, 2: sync slave",
-        default=2
+        default=2, type=int
     )
 
     parser.add_argument(

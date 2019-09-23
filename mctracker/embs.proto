@@ -20,8 +20,10 @@ message command {
     enum Command {
         PAUSE = 0;
         CONTINUE = 1;
+        START = 2;
     }
     required Command cmd = 1;
+    optional string master_address = 2;
 }
 
 message bbox {

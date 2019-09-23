@@ -40,7 +40,7 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
             embs_pb2.respond(respondid=0)
         # pass
     def sendCommand(self, request, context):
-        self.request_Q.put(int(request.cmd))
+        self.request_Q.put(request)
         return embs_pb2.respond(respondid=0)
         pass
 
@@ -52,7 +52,7 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 # running_mode 1 synchronous : this node is the master to other node
 #               2 sync : this node is the slave to other node
 class MultiCameraTracker:
-    def __init__(self, detection_file, metric, single_tracker, detections, bind_addr, server_addr, running_mode = 0):
+    def __init__(self, detection_file, metric, single_tracker, detections, bind_port, server_addr, running_mode = 0):
         self._single_tracker = single_tracker
         self.detections = detections
         if detection_file is not None:
@@ -63,8 +63,9 @@ class MultiCameraTracker:
 
         self.running_mode = running_mode
 
-        self.server_addr = server_addr
-
+        # free_port = find_free_port()
+        # bind_port = free_port[1]
+        bind_addr = "[::]:{}".format(int(bind_port))
         if len(bind_addr) > 0:
             self._request_Q = Queue(maxsize=20)
             self._payload_Q = Queue(maxsize=200)
@@ -73,9 +74,24 @@ class MultiCameraTracker:
             embs_pb2_grpc.add_EmbServerServicer_to_server(self.emb_receiving_sever, self.server)
             self.server.add_insecure_port(bind_addr)
             self.server.start()
+            print("Start the MCMT server at {}".format(bind_addr))
 
+        if self.running_mode == 2:
+            print("MCMT Tracker slave mode!!!!")
+            # wait here until master send the START signal
+            while True:
+                try:
+                    cmds = self._request_Q.get(block=False)
+                    if cmds.cmd == embs_pb2.command.START:
+                        self.server_addr = cmds.master_address
+                        print("Master message {} / {}".format(cmds.cmd, cmds.master_address))
+                        break
+                except Exception:
+                    time.sleep(0.1)
+        else:
+            self.server_addr = server_addr
         # initiate
-
+        self.client_stub = None
         if len(self.server_addr) > 0:
             self.client_Q = Queue(maxsize=200)
             self.client_channel = grpc.insecure_channel(self.server_addr)
@@ -85,6 +101,21 @@ class MultiCameraTracker:
             self.client_thread = Thread(target=self._sendEmbs, args=())
             self.client_thread.daemon = True
             self.client_thread.start()
+
+        if self.running_mode == 1:
+            # in master mode we need to tell the slave the current master bind_addess
+
+            try:
+                cmds = embs_pb2.command()
+                cmds.cmd = embs_pb2.command.START
+                cmds.master_address = "localhost:%d" % bind_port
+                respond = self.client_stub.sendCommand(cmds)
+                if respond.respondid == 0:
+                    return
+            except Exception as e:
+                print(e)
+                raise Exception("Error when sending signal to slave node")
+
         # self._mc_detection
 
     def _sendEmbs(self):
@@ -172,22 +203,24 @@ class MultiCameraTracker:
     #             print("Send error")
 
     def broadcast(self, detection):
-        if len(self.server_addr) > 0:
+        if self.client_stub is not None:
             self.client_Q.put(detection)
 
     def finished(self):
         if self.running_mode == 1: # this node is the master so we send the cmd to other node
             # while True:
-            self.client_stub.sendCommand(embs_pb2.command.CONTINUE)
+            respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.CONTINUE))
+            respond.respondid = 0
         elif self.running_mode == 2: # this node is the slave to other node so wait here until cmd from master arrive
             while True:
-                if self._request_Q.empty():
-                    time.sleep(0.1)
-                else:
-                    cmd = self._request_Q.get() # we wait to the signal
-                    if cmd.cmd == embs_pb2.command.CONTINUE:
-                        self._request_Q.task_done()
+                try:
+                    cmds = self._request_Q.get(block=False)
+                    if cmds.cmd == embs_pb2.command.CONTINUE:
+                        self.server_addr = cmds.master_address
+                        print("Frame continue".format(cmds.cmd, cmds.master_address))
                         return
+                except Exception:
+                    time.sleep(0.1)
 
         # otherwise just ignore
 

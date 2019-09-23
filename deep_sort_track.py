@@ -81,7 +81,7 @@ def run(args):
                 "euclidean", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric)
             mctracker = MultiCameraTracker("results/kitti_track_03/detections/0007.npy", metric, tracker, encoder.get_detections(),
-                                           args.bind_addr, args.server_addr, args.mc_mode)
+                                           args.bind_port, args.server_addr, args.mc_mode)
             # init the features exchange server
             # class
             # server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
