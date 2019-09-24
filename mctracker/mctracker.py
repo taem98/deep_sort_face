@@ -1,22 +1,23 @@
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from threading import Thread
-from multiprocessing import Pool
-import numpy as np
-from deep_sort import linear_assignment
+# this server should have the ability to create and mantain the server
+import os
+import sys
 import time
-from deep_sort.detection import Detection
+from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
-
-# import imutils.video
+from threading import Thread
 
 import grpc
-# this server should have the ability to create and mantain the server
-import os, sys
+import numpy as np
+
+from deep_sort import linear_assignment
+
+# import imutils.video
 sys.path.append(os.path.dirname(__file__))
 
 from mctracker import embs_pb2
 from mctracker import embs_pb2_grpc
+
+from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser, ServiceStateChange
 
 class EmbServer(embs_pb2_grpc.EmbServerServicer):
     def __init__(self, payload_q, request_q):
@@ -51,6 +52,8 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 # running_mode 0 asyncronos
 # running_mode 1 synchronous : this node is the master to other node
 #               2 sync : this node is the slave to other node
+
+
 class MultiCameraTracker:
     def __init__(self, detection_file, metric, single_tracker, detections, bind_port, server_addr, running_mode = 0):
         self._single_tracker = single_tracker
@@ -60,18 +63,24 @@ class MultiCameraTracker:
         else:
             self._other_detections = []
         self.metric = metric
-
         self.running_mode = running_mode
 
-        # free_port = find_free_port()
-        # bind_port = free_port[1]
-        bind_addr = "[::]:{}".format(int(bind_port))
-        if len(bind_addr) > 0:
+        self._mc_service = Zeroconf()
+        self._server_addr = []
+        if self.running_mode == 1:
+            print("MCT Tracker master mode!!!!")
+            self._server_addr = self._browsing_services()
+
+        # if bind_port == 0:
+        bind_port = self._register_services(bind_port, "mc_tracker")
+
+        if bind_port > 0:
             self._request_Q = Queue(maxsize=20)
             self._payload_Q = Queue(maxsize=200)
             self.server = grpc.server(ThreadPoolExecutor(max_workers=5))
             self.emb_receiving_sever = EmbServer(self._payload_Q, self._request_Q)
             embs_pb2_grpc.add_EmbServerServicer_to_server(self.emb_receiving_sever, self.server)
+            bind_addr = "[::]:{}".format(int(bind_port))
             self.server.add_insecure_port(bind_addr)
             self.server.start()
             print("Start the MCMT server at {}".format(bind_addr))
@@ -83,28 +92,33 @@ class MultiCameraTracker:
                 try:
                     cmds = self._request_Q.get(block=False)
                     if cmds.cmd == embs_pb2.command.START:
-                        self.server_addr = cmds.master_address
+                        self._server_addr.append(cmds.master_address)
                         print("Master message {} / {}".format(cmds.cmd, cmds.master_address))
                         break
                 except Exception:
                     time.sleep(0.1)
-        else:
-            self.server_addr = server_addr
-        # initiate
-        self.client_stub = None
-        if len(self.server_addr) > 0:
-            self.client_Q = Queue(maxsize=200)
-            self.client_channel = grpc.insecure_channel(self.server_addr)
-            self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
-            self.client_stop = False
 
-            self.client_thread = Thread(target=self._sendEmbs, args=())
-            self.client_thread.daemon = True
-            self.client_thread.start()
+        self.client_stub = None
+        # if len(self._server_addr) > 0:
+        for addr in self._server_addr:
+            try:
+                self.client_channel = grpc.insecure_channel(addr)
+                print("Connect to {} success".format(addr))
+                break
+            except Exception as e:
+                print(e)
+        if self.client_channel is None:
+            raise Exception("Cannot connect to slave server")
+        self.client_Q = Queue(maxsize=200)
+        self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
+        self.client_stop = False
+
+        self.client_thread = Thread(target=self._sendEmbs, args=())
+        self.client_thread.daemon = True
+        self.client_thread.start()
 
         if self.running_mode == 1:
             # in master mode we need to tell the slave the current master bind_addess
-
             try:
                 cmds = embs_pb2.command()
                 cmds.cmd = embs_pb2.command.START
@@ -117,6 +131,57 @@ class MultiCameraTracker:
                 raise Exception("Error when sending signal to slave node")
 
         # self._mc_detection
+
+    def _browsing_services(self,):
+        from typing import cast
+        import socket
+        addresses = []
+        try:
+            def on_service_state_change(
+                zeroconf: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange
+            ) -> None:
+                print("Service %s of type %s state changed: %s" % (name, service_type, state_change))
+                if state_change is ServiceStateChange.Added:
+                    info = zeroconf.get_service_info(service_type, name)
+                    if info:
+                        addresses.extend(["%s:%d" % (socket.inet_ntoa(addr), cast(int, info.port)) for addr in info.addresses])
+                        print("  Addresses: %s" % ", ".join(addresses))
+
+            browser = ServiceBrowser(self._mc_service, "_mctracker._tcp.local.", handlers=[on_service_state_change])
+
+            try:
+                while len(addresses) == 0:
+                    time.sleep(0.1)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                browser.cancel()
+
+        except Exception as e:
+            print("Browsing service failed, mannually input!!!")
+
+        return addresses
+
+    def _register_services(self, bind_port, name=""):
+        from mctracker import find_local_address, find_free_port
+        import socket
+        if bind_port == 0:
+            bind_port = find_free_port()[1]
+
+        addrs = find_local_address()
+        desc = {'version': '0.10', 'a': 'test value', 'b': 'another value'}
+        try:
+            info = ServiceInfo(
+                "_mctracker._tcp.local.",
+                "{}._mctracker._tcp.local.".format(name),
+                addresses=[socket.inet_aton(addr) for addr in addrs],
+                port=bind_port,
+                properties=desc,
+            )
+            self._mc_service.register_service(info)
+        except Exception as e:
+            print("Annce service faild, you have to mannually select the address")
+        return bind_port
 
     def _sendEmbs(self):
         while True:
@@ -143,7 +208,7 @@ class MultiCameraTracker:
                 payload.embs_num = total_object
                 try:
                     respond = self.client_stub.sendPayload(payload)
-                    print(respond.respondid)
+                    # print(respond.respondid)
                     # print("time {}".format(time.time() - _t0))
                     self.client_Q.task_done()
                 except Exception as e:
@@ -157,6 +222,11 @@ class MultiCameraTracker:
         except Exception:
             pass
 
+        try:
+            self._mc_service.unregister_all_services()
+        except Exception:
+            pass
+
         self.client_stop = True
         self.client_thread.join()
 
@@ -164,43 +234,6 @@ class MultiCameraTracker:
             self.client_channel.close()
         except Exception:
             pass
-
-    # def broadcastEmb(self):
-    #     '''
-    #     broadcast current tracking result to the air
-    #     actually we send to the omnet simulation or cohda wireless OBU to broadcast via V2X
-    #     '''
-    #     # confirmed_tracks = [
-    #     #     i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
-    #     _t0 = time.time()
-    #
-    #     payload = embs_pb2.payloads()
-    #     payload.carid = 0 # this id will be mark by simulation tool to ensure uniquely
-    #     payload.time = int(time.time())
-    #     # for idx, t in enumerate(self._single_tracker.tracks1):
-    #     total_object = 0
-    #     for track in self._single_tracker.tracks:
-    #         if not track.is_confirmed():
-    #             continue
-    #         # bbox = track.to_tlbr()
-    #         emb = payload.embs.add()
-    #         emb.id = track.track_id
-    #         detection = self.detections[track.detection_id]
-    #         emb.frame_time = int(detection[0])
-    #         emb.confidence = detection[6]
-    #         emb.labelid = int(detection[7])
-    #         for element in detection[10:]:
-    #             emb.weight.append(element)
-    #         total_object += 1
-    #     payload.embs_num = total_object
-    #
-    #     if total_object > 0:
-    #         try:
-    #             respond = self.client_stub.sendPayload(payload)
-    #             print(respond.respondid)
-    #             print("time {}".format(time.time() - _t0))
-    #         except Exception as e:
-    #             print("Send error")
 
     def broadcast(self, detection):
         if self.client_stub is not None:
@@ -216,7 +249,6 @@ class MultiCameraTracker:
                 try:
                     cmds = self._request_Q.get(block=False)
                     if cmds.cmd == embs_pb2.command.CONTINUE:
-                        self.server_addr = cmds.master_address
                         print("Frame continue".format(cmds.cmd, cmds.master_address))
                         return
                 except Exception:
@@ -227,7 +259,7 @@ class MultiCameraTracker:
     def agrregate(self, frame_id):
 
         def distance_metric(tracks, dets, track_indices, detection_indices):
-            features = np.array([dets[i,10:] for i in detection_indices])
+            features = np.array([dets[i, 10:] for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(features, targets)
             return cost_matrix
