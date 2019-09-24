@@ -23,7 +23,7 @@ message command {
         START = 2;
     }
     required Command cmd = 1;
-    optional string master_address = 2;
+    repeated string master_address = 2;
 }
 
 message bbox {

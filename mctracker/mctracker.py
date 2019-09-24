@@ -72,7 +72,7 @@ class MultiCameraTracker:
             self._server_addr = self._browsing_services()
 
         # if bind_port == 0:
-        bind_port = self._register_services(bind_port, "mc_tracker")
+        bind_port, local_addrs = self._register_services(bind_port, "mc_tracker")
 
         if bind_port > 0:
             self._request_Q = Queue(maxsize=20)
@@ -92,43 +92,54 @@ class MultiCameraTracker:
                 try:
                     cmds = self._request_Q.get(block=False)
                     if cmds.cmd == embs_pb2.command.START:
-                        self._server_addr.append(cmds.master_address)
-                        print("Master message {} / {}".format(cmds.cmd, cmds.master_address))
+                        self._server_addr.extend(addr for addr in cmds.master_address)
+                        print("Master message {}".format(cmds.cmd))
                         break
                 except Exception:
                     time.sleep(0.1)
 
         self.client_stub = None
         # if len(self._server_addr) > 0:
+
+        cmds = embs_pb2.command()
+        cmds.cmd = embs_pb2.command.START
+        for addr in local_addrs:
+            cmds.master_address.append("{}:{}".format(addr, bind_port))
+
         for addr in self._server_addr:
             try:
                 self.client_channel = grpc.insecure_channel(addr)
-                print("Connect to {} success".format(addr))
+                self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
+                # if self.running_mode == 1:
+                respond = self.client_stub.sendCommand(cmds)
+                print("Connect to {} success res".format(addr, respond.respondid))
                 break
             except Exception as e:
                 print(e)
+                self.client_channel = None
         if self.client_channel is None:
-            raise Exception("Cannot connect to slave server")
+            raise Exception("Cannot connect to server")
         self.client_Q = Queue(maxsize=200)
-        self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
+
         self.client_stop = False
 
         self.client_thread = Thread(target=self._sendEmbs, args=())
         self.client_thread.daemon = True
         self.client_thread.start()
 
-        if self.running_mode == 1:
+
             # in master mode we need to tell the slave the current master bind_addess
-            try:
-                cmds = embs_pb2.command()
-                cmds.cmd = embs_pb2.command.START
-                cmds.master_address = "localhost:%d" % bind_port
-                respond = self.client_stub.sendCommand(cmds)
-                if respond.respondid == 0:
-                    return
-            except Exception as e:
-                print(e)
-                raise Exception("Error when sending signal to slave node")
+            # try:
+            #     cmds = embs_pb2.command()
+            #     cmds.cmd = embs_pb2.command.START
+            #     for addr in local_addrs:
+            #         cmds.master_address.append("{}:{}".format(addr, bind_port))
+            #     respond = self.client_stub.sendCommand(cmds)
+            #     if respond.respondid == 0:
+            #         return
+            # except Exception as e:
+            #     print(e)
+            #     raise Exception("Error when sending signal to slave node")
 
         # self._mc_detection
 
@@ -181,7 +192,7 @@ class MultiCameraTracker:
             self._mc_service.register_service(info)
         except Exception as e:
             print("Annce service faild, you have to mannually select the address")
-        return bind_port
+        return bind_port, addrs
 
     def _sendEmbs(self):
         while True:

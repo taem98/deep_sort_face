@@ -30,7 +30,7 @@ def parse_args():
     )
     parser.add_argument(
         "--bind_port", help="address to bind Embedding server",
-        default=50051, type=int
+        default=0, type=int
     )
     parser.add_argument(
         "--server_addr", help="address to connect to Embedding server",

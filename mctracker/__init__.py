@@ -11,8 +11,11 @@ def find_local_address():
     import netifaces
     addr_list = []
     for idx, iface in enumerate(netifaces.interfaces()):
-        addr = netifaces.ifaddresses(iface)
-        for a in addr[netifaces.AF_INET]:
-            addr_list.append(a['addr'])
+        try:
+            addr = netifaces.ifaddresses(iface)
+            for a in addr[netifaces.AF_INET]:
+                addr_list.append(a['addr'])
+        except Exception:
+            pass
     return addr_list
 
