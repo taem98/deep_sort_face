@@ -110,6 +110,17 @@ class ImageViewer(object):
         self._color = (0, 0, 0)
         self.text_color = (255, 255, 255)
         self.thickness = 1
+        self.is_frame_updated = False
+        self._t0 = time.time()
+
+    def show_image(self):
+        if self.is_frame_updated:
+            cv2.imshow(self._caption, cv2.resize(self.image, self._window_shape[:2]))
+            self.is_frame_updated = False
+        t1 = time.time()
+        remaining_time = max(1, int(self._update_ms - 1e3 * (t1 - self._t0)))
+        key = cv2.waitKey(remaining_time)
+        return key
 
     @property
     def color(self):
@@ -308,17 +319,19 @@ class ImageViewer(object):
         self._terminate, is_paused = False, False
         # print("ImageViewer is paused, press space to start.")
         while not self._terminate:
-            t0 = time.time()
+            self._t0 = time.time()
             if not is_paused:
                 self._terminate = not self._user_fun()
                 if self._video_writer is not None:
                     self._video_writer.write(
                         cv2.resize(self.image, self._window_shape))
-            t1 = time.time()
-            remaining_time = max(1, int(self._update_ms - 1e3*(t1-t0)))
-            cv2.imshow(
-                self._caption, cv2.resize(self.image, self._window_shape[:2]))
-            key = cv2.waitKey(remaining_time)
+            key = self.show_image()
+            # cv2.imshow(
+            #     self._caption, cv2.resize(self.image, self._window_shape[:2]))
+            # t1 = time.time()
+            # remaining_time = max(1, int(self._update_ms - 1e3*(t1-self._t0)))
+            #
+            # key = cv2.waitKey(remaining_time)
             if key & 255 == 27:  # ESC
                 print("terminating")
                 self._terminate = True

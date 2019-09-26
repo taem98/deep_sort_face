@@ -108,6 +108,7 @@ class Visualization(object):
 
     def set_image(self, image):
         self.viewer.image = image
+        self.viewer.is_frame_updated = True
 
     def draw_groundtruth(self, track_ids, boxes):
         self.viewer.thickness = 2

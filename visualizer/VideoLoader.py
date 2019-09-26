@@ -78,11 +78,11 @@ class ImageLoader(Visualization):
     def _update_fun(self, frame_callback):
         if self.frame_idx > self.last_idx:
             return False
-        _t0 = time.time()
+        # _t0 = time.time()
         image = cv2.imread(self.image_filenames[self.frame_idx], cv2.IMREAD_COLOR)
-        _t1 = time.time() - _t0
+        # _t1 = time.time() - _t0
         frame_callback(self, image, self.frame_idx)
-        self.viewer.annotate(4, 50, "io_fps {:03.1f}".format(1 / _t1))
+        # self.viewer.annotate(4, 50, "io_fps {:03.1f}".format(1 / _t1))
         self.frame_idx += 1
         return True
 

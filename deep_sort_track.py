@@ -8,7 +8,6 @@ import numpy as np
 import json
 
 from application_util import preprocessing
-# from application_util import visualization
 from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
@@ -78,18 +77,10 @@ def run(args):
                 encoder = PseudoEncoder(detection_file, True)
 
             metric = nn_matching.NearestNeighborDistanceMetric(
-                "euclidean", args.max_cosine_distance, args.nn_budget)
+                "cosine", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric)
-            mctracker = MultiCameraTracker("results/kitti_track_03/detections/0007.npy", metric, tracker, encoder.get_detections(),
+            mctracker = MultiCameraTracker(metric, tracker, encoder.get_detections(),
                                            args.bind_port, args.server_addr, args.mc_mode)
-            # init the features exchange server
-            # class
-            # server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-            # embserver = EmbeddingsServing(tracker.tracks, encoder.get_detections())
-            # add_EmbServerServicer_to_server(embserver, server)
-            # # .add_GreeterServicer_to_server(self.embserver, self.server)
-            # server.add_insecure_port(args.bind_addr)
-            # server.start()
 
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
@@ -113,12 +104,6 @@ def run(args):
                 tracker.predict()
                 tracker.update(detections)
                 _t2 = time.time() - _t0 - _t1
-                # Update visualization.
-                if args.display:
-                    vis.set_image(frame.copy())
-                    vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1/_t1, 1/_t2))
-                    vis.draw_detections(detections)
-
                 # print(seq_info["detections"][frame_idx][7])
                 # Store results.
                 # track_id list
@@ -133,9 +118,13 @@ def run(args):
                 # mctracker.broadcastEmb()
                 matching = mctracker.agrregate(frame_idx)
 
+                # Update visualization.
                 if args.display:
+                    vis.set_image(frame.copy())
+                    vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
+                    vis.draw_detections(detections)
                     vis.draw_trackers_with_othertag(tracker.tracks, matching)
-
+                    vis.viewer.show_image()
                 # notify other tracker or wait here
                 mctracker.finished()
 

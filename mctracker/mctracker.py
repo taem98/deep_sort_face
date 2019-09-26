@@ -3,7 +3,7 @@ import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
+from queue import Queue, Empty, Full
 from threading import Thread
 
 import grpc
@@ -55,13 +55,8 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 
 
 class MultiCameraTracker:
-    def __init__(self, detection_file, metric, single_tracker, detections, bind_port, server_addr, running_mode = 0):
+    def __init__(self, metric, single_tracker, detections, bind_port, server_addr, running_mode = 0):
         self._single_tracker = single_tracker
-        self.detections = detections
-        if detection_file is not None:
-            self._other_detections = np.load(detection_file)
-        else:
-            self._other_detections = []
         self.metric = metric
         self.running_mode = running_mode
 
@@ -110,7 +105,7 @@ class MultiCameraTracker:
             try:
                 self.client_channel = grpc.insecure_channel(addr)
                 self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
-                # if self.running_mode == 1:
+                # send to test the connection
                 respond = self.client_stub.sendCommand(cmds)
                 print("Connect to {} success res".format(addr, respond.respondid))
                 break
@@ -126,22 +121,6 @@ class MultiCameraTracker:
         self.client_thread = Thread(target=self._sendEmbs, args=())
         self.client_thread.daemon = True
         self.client_thread.start()
-
-
-            # in master mode we need to tell the slave the current master bind_addess
-            # try:
-            #     cmds = embs_pb2.command()
-            #     cmds.cmd = embs_pb2.command.START
-            #     for addr in local_addrs:
-            #         cmds.master_address.append("{}:{}".format(addr, bind_port))
-            #     respond = self.client_stub.sendCommand(cmds)
-            #     if respond.respondid == 0:
-            #         return
-            # except Exception as e:
-            #     print(e)
-            #     raise Exception("Error when sending signal to slave node")
-
-        # self._mc_detection
 
     def _browsing_services(self,):
         from typing import cast
@@ -199,14 +178,12 @@ class MultiCameraTracker:
             if self.client_stop:
                 break
             total_object = 0
-            if not self.client_Q.empty():
-                _t0 = time.time()
-                detection = self.client_Q.get()
+            try:
+                # _t0 = time.time()
+                detection = self.client_Q.get(False)
                 payload = embs_pb2.payloads()
                 payload.carid = 0  # this id will be mark by simulation tool to ensure uniquely
                 payload.time = int(time.time())
-                # for idx, t in enumerate(self._single_tracker.tracks1):
-                # bbox = track.to_tlbr()
                 emb = payload.embs.add()
                 # detection = self.detections[track.detection_id]
                 emb.frame_time = int(detection[0])
@@ -217,15 +194,14 @@ class MultiCameraTracker:
                     emb.weight.append(element)
                 total_object += 1
                 payload.embs_num = total_object
-                try:
-                    respond = self.client_stub.sendPayload(payload)
-                    # print(respond.respondid)
-                    # print("time {}".format(time.time() - _t0))
-                    self.client_Q.task_done()
-                except Exception as e:
-                    print("Send error {}".format(e))
-            else:
-                time.sleep(0.1)
+                respond = self.client_stub.sendPayload(payload)
+                # print(respond.respondid)
+                # print("time {}".format(time.time() - _t0))
+                self.client_Q.task_done()
+            except Empty:
+                time.sleep(0.01)
+            except Exception as e:
+                print("Send error {}".format(e))
 
     def __del__(self):
         try:
@@ -269,43 +245,36 @@ class MultiCameraTracker:
 
     def agrregate(self, frame_id):
 
+        _detections = []
+        _features = []
+        while not self._payload_Q.empty():
+            detection = self._payload_Q.get()
+            _detections.append(detection)
+            _features.append(detection[10:])
+            self._payload_Q.task_done()
+            time.sleep(0.01)
+        _detections = np.asarray(_detections)
+        _features = np.asarray(_features)
+
         def distance_metric(tracks, dets, track_indices, detection_indices):
-            features = np.array([dets[i, 10:] for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
-            cost_matrix = self.metric.distance(features, targets)
+            cost_matrix = self.metric.distance(_features, targets)
             return cost_matrix
         # we get the 2 previous frame from other camera
-        _other_camera_indices = self._other_detections[:, 0].astype(np.int)
-        _other_track_indices = self._other_detections[:, 1].astype(np.int)
-        if frame_id  < _other_camera_indices.min():
-        # we return here since the other camera info is not availabel
-            return []
-        # _other_camera_frame = self._othercamera_detection[frame_id - 2]
-        _other_mask = (_other_camera_indices == frame_id) & (_other_track_indices != -1)
-        _other_rows = self._other_detections[_other_mask]
-        if (len(_other_rows) == 0):
-            # no available tracklet, return
-            return []
-        # finish getting the new space
 
-        # if
+        if len(_detections) == 0:
+            return []
 
-        # detections = []
-        # detection_indices = []
-        # for idx, row in enumerate(_other_rows):
-            # bbox, confidence, feature, label = row[2:6], row[6], row[10:], row[7]
-            # detections.append(Detection(bbox, confidence, feature, label, idx))
-            # detection_indices.append(idx)
-        detection_indices = list(range(len(_other_rows)))
+        detection_indices = list(range(len(_detections)))
         confirmed_tracks = [
             i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
 
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
-            linear_assignment.min_cost_matching(distance_metric, self.metric.matching_threshold, self._single_tracker.tracks, _other_rows,
-                confirmed_tracks, detection_indices)
+            linear_assignment.min_cost_matching(distance_metric, self.metric.matching_threshold, self._single_tracker.tracks,
+                                                _features, confirmed_tracks, detection_indices)
         match_indies = [(self._single_tracker.tracks[track_idx].track_id,
-                         _other_rows[detection_idx, 1].astype(np.int))
+                         _detections[detection_idx, 1].astype(np.int))
                         for track_idx, detection_idx in matches_a]
         return match_indies
             # linear_assignment.min_cost_matching(
