@@ -49,16 +49,20 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 
 # implement the tracker based on the previous running example from difference camera
 # we must change to socket connection later
-# running_mode 0 asyncronos
+# running_mode 0 single track only
 # running_mode 1 synchronous : this node is the master to other node
 #               2 sync : this node is the slave to other node
-
+#               3 async
 
 class MultiCameraTracker:
     def __init__(self, metric, single_tracker, running_mode, bind_port = 0, server_addr = ""):
         self._single_tracker = single_tracker
         self.metric = metric
         self.running_mode = running_mode
+
+        if self.running_mode == 0:
+            print("MCT Tracker off")
+            return
 
         self._mc_service = Zeroconf()
         self._server_addr = []
@@ -125,6 +129,80 @@ class MultiCameraTracker:
         self.client_thread = Thread(target=self._sendEmbs, args=())
         self.client_thread.daemon = True
         self.client_thread.start()
+
+    def finished(self):
+        if self.running_mode == 1: # this node is the master so we send the cmd to other node
+            # while True:
+            respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.CONTINUE))
+            respond.respondid = 0
+        elif self.running_mode == 2: # this node is the slave to other node so wait here until cmd from master arrive
+            while True:
+                try:
+                    cmds = self._request_Q.get(block=False)
+                    if cmds.cmd == embs_pb2.command.CONTINUE:
+                        print("Frame continue".format(cmds.cmd, cmds.master_address))
+                        return
+                except Exception:
+                    time.sleep(0.1)
+
+        # otherwise just ignore
+
+    def agrregate(self, frame_id):
+        if self.running_mode == 0:
+            return []
+        _detections = []
+        _features = []
+        while not self._payload_Q.empty():
+            detection = self._payload_Q.get()
+            _detections.append(detection)
+            _features.append(detection[10:])
+            self._payload_Q.task_done()
+            time.sleep(0.01)
+        _detections = np.asarray(_detections)
+        _features = np.asarray(_features)
+
+        def distance_metric(tracks, dets, track_indices, detection_indices):
+            targets = np.array([tracks[i].track_id for i in track_indices])
+            cost_matrix = self.metric.distance(_features, targets)
+            return cost_matrix
+        # we get the 2 previous frame from other camera
+
+        if len(_detections) == 0:
+            return []
+
+        detection_indices = list(range(len(_detections)))
+        confirmed_tracks = [
+            i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
+
+        # Associate confirmed tracks using appearance features.
+        matches_a, unmatched_tracks_a, unmatched_detections = \
+            linear_assignment.min_cost_matching(distance_metric, self.metric.matching_threshold, self._single_tracker.tracks,
+                                                _features, confirmed_tracks, detection_indices)
+        match_indies = [(self._single_tracker.tracks[track_idx].track_id,
+                         _detections[detection_idx, 1].astype(np.int))
+                        for track_idx, detection_idx in matches_a]
+        return match_indies
+            # linear_assignment.min_cost_matching(
+            #     gated_metric, self.metric.matching_threshold, self.max_age,
+            #     self.tracks, detections, confirmed_tracks)
+
+        # _frame_indices = tracker[:, 0].astype(np.int)
+        # _track_indices = tracker[:, 1].astype(np.int)
+        # _track_mask = _frame_indices
+        # get the current trackid
+        # _frame_min = frame_id - 30
+
+
+        # if _frame_min < _frame_indices.min():
+        #     _frame_min = _frame_indices.min()
+        #
+        # for history_id in range(frame_id, _frame_min, -1):
+        #     mask = (_frame_indices == history_id) & (_track_indices != -1)
+        #     rows = tracker[mask]
+        #
+        #     print("current frame {}".format(history_id))
+
+        # now we do cascade matching for each available track id
 
     def _browsing_services(self,):
         from typing import cast
@@ -227,81 +305,12 @@ class MultiCameraTracker:
             pass
 
     def broadcast(self, detection):
+        if self.running_mode == 0:
+            return
         if self.client_stub is not None:
             self.client_Q.put(detection)
 
-    def finished(self):
-        if self.running_mode == 1: # this node is the master so we send the cmd to other node
-            # while True:
-            respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.CONTINUE))
-            respond.respondid = 0
-        elif self.running_mode == 2: # this node is the slave to other node so wait here until cmd from master arrive
-            while True:
-                try:
-                    cmds = self._request_Q.get(block=False)
-                    if cmds.cmd == embs_pb2.command.CONTINUE:
-                        print("Frame continue".format(cmds.cmd, cmds.master_address))
-                        return
-                except Exception:
-                    time.sleep(0.1)
 
-        # otherwise just ignore
-
-    def agrregate(self, frame_id):
-
-        _detections = []
-        _features = []
-        while not self._payload_Q.empty():
-            detection = self._payload_Q.get()
-            _detections.append(detection)
-            _features.append(detection[10:])
-            self._payload_Q.task_done()
-            time.sleep(0.01)
-        _detections = np.asarray(_detections)
-        _features = np.asarray(_features)
-
-        def distance_metric(tracks, dets, track_indices, detection_indices):
-            targets = np.array([tracks[i].track_id for i in track_indices])
-            cost_matrix = self.metric.distance(_features, targets)
-            return cost_matrix
-        # we get the 2 previous frame from other camera
-
-        if len(_detections) == 0:
-            return []
-
-        detection_indices = list(range(len(_detections)))
-        confirmed_tracks = [
-            i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
-
-        # Associate confirmed tracks using appearance features.
-        matches_a, unmatched_tracks_a, unmatched_detections = \
-            linear_assignment.min_cost_matching(distance_metric, self.metric.matching_threshold, self._single_tracker.tracks,
-                                                _features, confirmed_tracks, detection_indices)
-        match_indies = [(self._single_tracker.tracks[track_idx].track_id,
-                         _detections[detection_idx, 1].astype(np.int))
-                        for track_idx, detection_idx in matches_a]
-        return match_indies
-            # linear_assignment.min_cost_matching(
-            #     gated_metric, self.metric.matching_threshold, self.max_age,
-            #     self.tracks, detections, confirmed_tracks)
-
-        # _frame_indices = tracker[:, 0].astype(np.int)
-        # _track_indices = tracker[:, 1].astype(np.int)
-        # _track_mask = _frame_indices
-        # get the current trackid
-        # _frame_min = frame_id - 30
-
-
-        # if _frame_min < _frame_indices.min():
-        #     _frame_min = _frame_indices.min()
-        #
-        # for history_id in range(frame_id, _frame_min, -1):
-        #     mask = (_frame_indices == history_id) & (_track_indices != -1)
-        #     rows = tracker[mask]
-        #
-        #     print("current frame {}".format(history_id))
-
-        # now we do cascade matching for each available track id
 
 
         # for row in rows:
