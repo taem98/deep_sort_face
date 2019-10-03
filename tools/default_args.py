@@ -34,7 +34,7 @@ def parse_args():
     )
     parser.add_argument(
         "--server_addr", help="address to connect to Embedding server",
-        default="localhost:50051"
+        default=""
     )
 
     parser.add_argument(

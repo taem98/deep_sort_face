@@ -55,7 +55,7 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 
 
 class MultiCameraTracker:
-    def __init__(self, metric, single_tracker, detections, bind_port, server_addr, running_mode = 0):
+    def __init__(self, metric, single_tracker, running_mode, bind_port = 0, server_addr = ""):
         self._single_tracker = single_tracker
         self.metric = metric
         self.running_mode = running_mode
@@ -64,10 +64,15 @@ class MultiCameraTracker:
         self._server_addr = []
         if self.running_mode == 1:
             print("MCT Tracker master mode!!!!")
-            self._server_addr = self._browsing_services()
+            if len(server_addr) > 0:
+                self._server_addr = server_addr
+            else:
+                self._server_addr = self._browsing_services()
 
-        # if bind_port == 0:
-        bind_port, local_addrs = self._register_services(bind_port, "mc_tracker")
+
+        _ports, local_addrs = self._register_services(bind_port, "mc_tracker")
+        if bind_port == 0:
+            bind_port = _ports
 
         if bind_port > 0:
             self._request_Q = Queue(maxsize=20)
@@ -114,10 +119,9 @@ class MultiCameraTracker:
                 self.client_channel = None
         if self.client_channel is None:
             raise Exception("Cannot connect to server")
+
         self.client_Q = Queue(maxsize=200)
-
         self.client_stop = False
-
         self.client_thread = Thread(target=self._sendEmbs, args=())
         self.client_thread.daemon = True
         self.client_thread.start()

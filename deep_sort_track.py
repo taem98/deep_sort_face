@@ -79,8 +79,7 @@ def run(args):
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "cosine", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric)
-            mctracker = MultiCameraTracker(metric, tracker, encoder.get_detections(),
-                                           args.bind_port, args.server_addr, args.mc_mode)
+            mctracker = MultiCameraTracker(metric, tracker, args.mc_mode, args.bind_port, args.server_addr)
 
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
