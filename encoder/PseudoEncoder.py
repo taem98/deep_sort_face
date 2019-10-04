@@ -28,6 +28,12 @@ class PseudoEncoder(object):
         else:
             return self._detections_list
 
+    def get_class_id(self, frameid):
+        if self._from_file:
+            return self._raw_detection[frameid][7].astype(np.int)
+        else:
+            return self._detections_list[frameid][7].astype(np.int)
+
     def update_trackid(self, frameid, trackid):
         if self._from_file:
             self._raw_detection[frameid][1] = trackid
@@ -72,3 +78,4 @@ class PseudoEncoder(object):
             #     wr = csv.writer(f, quoting=csv.QUOTE_ALL)
             #     wr.writerow(self._detections_list)
             self._detections_list = []
+            self._detection_id = 0

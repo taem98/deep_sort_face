@@ -296,10 +296,9 @@ class MultiCameraTracker:
         except Exception:
             pass
 
-        self.client_stop = True
-        self.client_thread.join()
-
         try:
+            self.client_stop = True
+            self.client_thread.join()
             self.client_channel.close()
         except Exception:
             pass

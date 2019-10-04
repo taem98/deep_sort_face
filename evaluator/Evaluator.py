@@ -32,7 +32,8 @@ class Evaluator(object):
             self.tag = kitti_tag()
 
     def append(self, frameid, trackid, bbox, label=1):
-        self._results.append([frameid, trackid, label, bbox[0], bbox[1], bbox[2], bbox[3]])
+        # to_tlbr self.left, self.top, self.right, self.bot,
+        self._results.append([frameid, trackid, label, bbox[1], bbox[0], bbox[3], bbox[2]])
 
     def save(self, output_dir, sequence):
         if len(self._results) == 0:

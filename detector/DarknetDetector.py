@@ -70,7 +70,7 @@ class Detector(PseudoDetector):
                 List[([x,y,w,h],prob, class_id, class_name)]
                 Returns detection responses at given frame index.
         """
-        super().__init__(False, None)
+        super().__init__(False, None, None)
         self._from_file = False
         if os.name == "nt":
             raise Exception("Windows is not support")

@@ -3,7 +3,15 @@ import os
 import csv
 
 class NoneDetector(object):
-    def __init__(self):
+    def __init__(self, metaFile):
+        self.altNames = None
+        try:
+            if os.path.exists(metaFile):
+                with open(metaFile) as namesFH:
+                    namesList = namesFH.read().strip().split("\n")
+                    self.altNames = [x.strip() for x in namesList]
+        except TypeError:
+            pass
         pass
 
     def __call__(self, img, frame_idx):
@@ -14,8 +22,8 @@ class NoneDetector(object):
 
 
 class PseudoDetector(NoneDetector):
-    def __init__(self, detFile, fromFile=True):
-        super().__init__()
+    def __init__(self, detFile, metaFile, fromFile=True):
+        super().__init__(metaFile)
         self._from_file = fromFile
         self._detections_list = []
         # self._dtype = [("frame_id", np.int) ,("track_id", np.int), ("x", np.float32),

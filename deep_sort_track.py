@@ -30,6 +30,8 @@ def run(args):
     running_cfg = args.running_cfg
     evaluator = Evaluator()
 
+    metaFile = "./detector/data/coco.names"
+
     if running_cfg == "from_detect":
         print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
         cfg_path = "../alex_darknet/cfg/yolov3.cfg"
@@ -70,9 +72,9 @@ def run(args):
         if os.path.isdir(sequence_dir):
             if running_cfg == "from_encoded":
                 raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % sequence)
-                detector = PseudoDetector(detFile=raw_detections_file)
+                detector = PseudoDetector(detFile=raw_detections_file, metaFile=metaFile)
             elif running_cfg == "track":
-                detector = NoneDetector()
+                detector = NoneDetector(metaFile=metaFile)
                 detection_file = os.path.join(detections_dir, "%s.npy" % sequence)
                 encoder = PseudoEncoder(detection_file, True)
 
@@ -110,8 +112,10 @@ def run(args):
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
                     bbox = track.to_tlbr()
-                    evaluator.append(frame_idx, track.track_id, bbox, "Car")
                     mctracker.broadcast(encoder.update_trackid(track.detection_id, track.track_id))
+                    class_id = encoder.get_class_id(track.detection_id)
+                    class_name = detector.altNames[class_id]
+                    evaluator.append(frame_idx, track.track_id, bbox, class_name)
                     # mctracker.client_Q.put()
                     # left top right bottom
                 # mctracker.broadcastEmb()
