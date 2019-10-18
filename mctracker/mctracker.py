@@ -133,8 +133,11 @@ class MultiCameraTracker:
     def finished(self):
         if self.running_mode == 1: # this node is the master so we send the cmd to other node
             # while True:
-            respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.CONTINUE))
-            respond.respondid = 0
+            try:
+                respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.CONTINUE))
+                respond.respondid = 0
+            except Exception:
+                pass
         elif self.running_mode == 2: # this node is the slave to other node so wait here until cmd from master arrive
             while True:
                 try:

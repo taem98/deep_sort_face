@@ -74,6 +74,8 @@ class Track:
 
         self.state = TrackState.Tentative
         self.features = []
+        self.detection_bboxs = None
+
         if feature is not None:
             self.features.append(feature)
         # if label is not None:
@@ -138,6 +140,7 @@ class Track:
         """
         self.mean, self.covariance = kf.update(
             self.mean, self.covariance, detection.to_xyah())
+        self.detection_bboxs = detection.tlwh.copy()
         self.features.append(detection.feature)
         self.detection_id = detection.detection_id
         self.hits += 1
