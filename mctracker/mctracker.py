@@ -176,14 +176,33 @@ class MultiCameraTracker:
         detection_indices = list(range(len(_detections)))
         confirmed_tracks = [
             i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
-
+        # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
             linear_assignment.min_cost_matching(distance_metric, self.metric.matching_threshold, self._single_tracker.tracks,
                                                 _features, confirmed_tracks, detection_indices)
-        match_indies = [(self._single_tracker.tracks[track_idx].track_id,
-                         _detections[detection_idx, 1].astype(np.int))
-                        for track_idx, detection_idx in matches_a]
+        # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
+        #                  _detections[detection_idx, 1].astype(np.int))
+        #                 for track_idx, detection_idx in matches_a]
+        match_indies = []
+        features, targets, active_targets = [], [], []
+        for track_idx, detection_idx in matches_a:
+            _trackid = self._single_tracker.tracks[track_idx].track_id
+            match_indies.append((_trackid, _detections[detection_idx, 1].astype(np.int)))
+            # features.append()
+            # targets.append()
+            self.metric.samples.setdefault(self._single_tracker.tracks[track_idx].track_id, []).append(_features[detection_idx])
+            if self.metric.budget is not None:
+                self.metric.samples[_trackid] = self.metric.samples[_trackid][-self.metric.budget:]
+
+        # try:
+        #     self.metric.partial_fit(
+        #         np.asarray(features), np.asarray(targets), active_targets)
+        # except Exception:
+        #     pass
+            # queue the confirmed tracklet into the the target track
+
+        # self.metric.
         return match_indies
             # linear_assignment.min_cost_matching(
             #     gated_metric, self.metric.matching_threshold, self.max_age,

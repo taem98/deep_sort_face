@@ -125,8 +125,8 @@ def run(args):
                 if args.display:
                     vis.set_image(frame.copy())
                     vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
-                    # vis.draw_detections(detections)
-                    vis.draw_trackers_with_othertag(tracker.tracks, matching)
+                    vis.draw_detections(detections)
+                    vis.draw_trackers_with_othertag(tracker.tracks, matching, True)
                     vis.viewer.show_image()
                 # notify other tracker or wait here
                 mctracker.finished()

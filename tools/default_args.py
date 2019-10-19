@@ -58,7 +58,7 @@ def parse_args():
         "metric (object appearance).", type=float, default=0.1)
     parser.add_argument(
         "--nn_budget", help="Maximum size of the appearance descriptors "
-        "gallery. If None, no budget is enforced.", type=int, default=100)
+        "gallery. If None, no budget is enforced.", type=int, default=200)
     parser.add_argument(
         "--display", help="Show intermediate tracking results",
         default=True, type=bool_string)
