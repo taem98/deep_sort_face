@@ -31,7 +31,7 @@ def run(args):
     mctracker = MultiCameraTracker(args.mc_mode, args.bind_port, args.server_addr)
     evaluator = Evaluator()
 
-    metaFile = "./detector/data/coco.names"
+    metaFile = "./detector/data/kitti.names"
 
     if running_cfg == "from_detect":
         print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
@@ -47,7 +47,7 @@ def run(args):
         config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
         sess = tf.Session(config=config)
         frozen_ckpt = "./encoder_trinet.pb"
-        class_filter = [2, 5, 7]
+        class_filter = [0, 2, 6, 7]
         encoder = TripletNet(sess, frozen_ckpt, class_filter)
 
     specific_sequence = args.sequence
