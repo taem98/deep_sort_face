@@ -14,7 +14,10 @@ class PseudoEncoder(object):
                 raise FileNotFoundError("Can not found detection file")
             self._raw_detection = np.load(detFile)
             # print(self._raw_detection[0,"frame_id"])
-            self._frame_indices = self._raw_detection[:, 0].astype(np.int)
+            try:
+                self._frame_indices = self._raw_detection[:, 0].astype(np.int)
+            except Exception as e:
+                self._frame_indices = None
 
     # def get_detection(self, idx, trackid):
     #     if self._from_file:
@@ -50,6 +53,8 @@ class PseudoEncoder(object):
         '''
         res = []
         if self._from_file:
+            if self._frame_indices is None:
+                return res
             mask = self._frame_indices == frame_id
             rows = self._raw_detection[mask]
         else:

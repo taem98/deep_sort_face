@@ -28,6 +28,7 @@ def run(args):
 
     running_name = args.running_name
     running_cfg = args.running_cfg
+    mctracker = MultiCameraTracker(args.mc_mode, args.bind_port, args.server_addr)
     evaluator = Evaluator()
 
     metaFile = "./detector/data/coco.names"
@@ -81,8 +82,7 @@ def run(args):
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "cosine", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric)
-            mctracker = MultiCameraTracker(metric, tracker, args.mc_mode, args.bind_port, args.server_addr)
-
+            mctracker.updateSingleTracker(tracker, metric)
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
 
@@ -141,6 +141,7 @@ def run(args):
 
             try:
                 visualizer.run(frame_callback)
+                mctracker.removeSingleTracker()
             except Exception as e:
                 raise Exception("exception")
                 print(e)

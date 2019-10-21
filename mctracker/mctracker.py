@@ -55,9 +55,9 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
 #               3 async
 
 class MultiCameraTracker:
-    def __init__(self, metric, single_tracker, running_mode, bind_port = 0, server_addr = ""):
-        self._single_tracker = single_tracker
-        self.metric = metric
+    def __init__(self, running_mode, bind_port = 0, server_addr = ""):
+        self._single_tracker = None
+        self.metric = None
         self.running_mode = running_mode
 
         if self.running_mode == 0:
@@ -130,6 +130,14 @@ class MultiCameraTracker:
         self.client_thread.daemon = True
         self.client_thread.start()
 
+    def updateSingleTracker(self, single_tracker, metric):
+        self._single_tracker = single_tracker
+        self.metric = metric
+
+    def removeSingleTracker(self):
+        self._single_tracker = None
+        self.metric = None
+
     def finished(self):
         if self.running_mode == 1: # this node is the master so we send the cmd to other node
             # while True:
@@ -153,6 +161,11 @@ class MultiCameraTracker:
     def agrregate(self, frame_id):
         if self.running_mode == 0:
             return []
+
+        if self._single_tracker is None or self.metric is None:
+            print("UPDATE YOUR SINGLE TRACKER AND METRIC FIRST")
+            return []
+
         _detections = []
         _features = []
         while not self._payload_Q.empty():
