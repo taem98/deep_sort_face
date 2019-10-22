@@ -23,38 +23,17 @@ from evaluator.Evaluator import Evaluator
 from tools.default_args import *
 from mctracker.mctracker import MultiCameraTracker
 
+def load_json_config(jsonfile):
+    with open(jsonfile, "r") as f:
+        config = json.load(f)
+    return config
 
 def run(args):
 
     running_name = args.running_name
     running_cfg = args.running_cfg
-    mctracker = MultiCameraTracker(args.mc_mode, args.bind_port, args.server_addr)
-    evaluator = Evaluator()
-
-    metaFile = "./detector/data/kitti.names"
-
-    if running_cfg == "from_detect":
-        print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
-        cfg_path = "../alex_darknet/cfg/yolov3.cfg"
-        meta_path = "detector/cfg/coco.data"
-        weight_path = "../alex_darknet/yolov3.weights"
-        detector = Detector(configPath=cfg_path, metaPath=meta_path, weightPath=weight_path,
-                            sharelibPath="./libdarknet.so", gpu_num=args.gpu)
-    if running_cfg == "from_detect" or running_cfg == "from_encoded":
-        config = tf.ConfigProto()
-        # config.gpu_options.per_process_gpu_memory_fraction = 0.1
-        config.gpu_options.visible_device_list = str(args.gpu)
-        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-        sess = tf.Session(config=config)
-        frozen_ckpt = "./encoder_trinet.pb"
-        # class_filter = [0, 2, 6, 7]
-        class_filter = [2, 5, 7]
-        encoder = TripletNet(sess, frozen_ckpt, class_filter)
-
-    specific_sequence = args.sequence
 
     result_folder = os.path.join("results", running_name)
-
     raw_detections_dir = os.path.join(result_folder, "raw_detections")
     detections_dir = os.path.join(result_folder, "detections")
     track_dir = os.path.join(result_folder, "tracks")
@@ -67,6 +46,34 @@ def run(args):
     with open(os.path.join(result_folder, "args.json"), 'w') as f:
         json.dump(vars(args), f, ensure_ascii=False, indent=2, sort_keys=True)
 
+    mctracker = MultiCameraTracker(args.mc_mode, args.bind_port, args.server_addr)
+    evaluator = Evaluator()
+
+    try:
+        detection_cfg = load_json_config(os.path.join(result_folder, "config_detector.json"))
+        extractor_cfg = load_json_config(os.path.join(result_folder, "config_extractor.json"))
+    except Exception as e:
+        print(e)
+        print("MUST CONFIGURE THE CORRECT config_detector and config_extractor file")
+        return
+
+    if running_cfg == "from_detect":
+        print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
+        print("Detector config: %s" % detection_cfg['name'])
+        detector = Detector(configPath=detection_cfg['cfg_path'], metaPath=detection_cfg['meta_path'],
+                            weightPath=detection_cfg['weight_path'], sharelibPath=detection_cfg['sharelibPath'],
+                            gpu_num=args.gpu)
+    if running_cfg == "from_detect" or running_cfg == "from_encoded":
+        print("Extractor config: %s" % extractor_cfg['name'])
+        config = tf.ConfigProto()
+        # config.gpu_options.per_process_gpu_memory_fraction = 0.1
+        config.gpu_options.visible_device_list = str(args.gpu)
+        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+        sess = tf.Session(config=config)
+        encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'])
+
+    specific_sequence = args.sequence
+
     for sequence in os.listdir(args.sequence_dir):
         if len(specific_sequence) > 0 and sequence != specific_sequence:
             continue
@@ -74,15 +81,15 @@ def run(args):
         if os.path.isdir(sequence_dir):
             if running_cfg == "from_encoded":
                 raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % sequence)
-                detector = PseudoDetector(detFile=raw_detections_file, metaFile=metaFile)
+                detector = PseudoDetector(detFile=raw_detections_file, metaFile=detection_cfg['metaFile'])
             elif running_cfg == "track":
-                detector = NoneDetector(metaFile=metaFile)
+                detector = NoneDetector(metaFile=detection_cfg['metaFile'])
                 detection_file = os.path.join(detections_dir, "%s.npy" % sequence)
                 encoder = PseudoEncoder(detection_file, True)
 
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "cosine", args.max_cosine_distance, args.nn_budget)
-            tracker = Tracker(metric)
+            tracker = Tracker(metric, max_iou_distance=0.6)
             mctracker.updateSingleTracker(tracker, metric)
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
