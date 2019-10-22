@@ -44,7 +44,7 @@ class VideoLoader(Visualization):
             return False
 
 class ImageLoader(Visualization):
-    def __init__(self, image_dir, update_ms, running_name=""):
+    def __init__(self, image_dir, update_ms, running_name="", starting_frameid=0):
         supported_formats = [".png", ".jpg"]
 
         self.image_filenames = {
@@ -76,6 +76,7 @@ class ImageLoader(Visualization):
         }
 
         super().__init__(seq_info, update_ms)
+        self.frame_idx = starting_frameid
 
     def _update_fun(self, frame_callback):
         if self.frame_idx > self.last_idx:

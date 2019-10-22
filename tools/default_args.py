@@ -65,4 +65,7 @@ def parse_args():
     parser.add_argument(
         "--save_video", help="Save the result videos",
         default=False, type=bool_string)
+    parser.add_argument(
+        "--start_frame", help="Starting frame id", type=int, default=0
+    )
     return parser
