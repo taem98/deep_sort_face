@@ -47,7 +47,8 @@ def run(args):
         config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
         sess = tf.Session(config=config)
         frozen_ckpt = "./encoder_trinet.pb"
-        class_filter = [0, 2, 6, 7]
+        # class_filter = [0, 2, 6, 7]
+        class_filter = [2, 5, 7]
         encoder = TripletNet(sess, frozen_ckpt, class_filter)
 
     specific_sequence = args.sequence
@@ -126,7 +127,7 @@ def run(args):
                     vis.set_image(frame.copy())
                     vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
                     vis.draw_detections(detections)
-                    vis.draw_trackers_with_othertag(tracker.tracks, matching, True)
+                    vis.draw_trackers_with_othertag(tracker.tracks, matching, False)
                     vis.viewer.show_image()
                 # notify other tracker or wait here
                 mctracker.finished()

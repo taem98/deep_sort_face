@@ -46,6 +46,8 @@ class Tracker:
         self.kf = kalman_filter.KalmanFilter()
         self.tracks = []
         self._next_id = 1
+        self._match_apperance = 0
+        self._match_iou = 0
 
     def predict(self):
         """Propagate track state distributions one time step forward.
@@ -125,7 +127,8 @@ class Tracker:
             linear_assignment.min_cost_matching(
                 iou_matching.iou_cost, self.max_iou_distance, self.tracks,
                 detections, iou_track_candidates, unmatched_detections)
-
+        self._match_apperance += len(matches_a)
+        self._match_iou += len(matches_b)
         matches = matches_a + matches_b
         unmatched_tracks = list(set(unmatched_tracks_a + unmatched_tracks_b))
         return matches, unmatched_tracks, unmatched_detections

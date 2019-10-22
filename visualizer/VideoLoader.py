@@ -46,9 +46,10 @@ class VideoLoader(Visualization):
 class ImageLoader(Visualization):
     def __init__(self, image_dir, update_ms, running_name=""):
         supported_formats = [".png", ".jpg"]
+
         self.image_filenames = {
-            int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
-            for f in os.listdir(image_dir) if os.path.splitext(f)[-1] in supported_formats}
+            int(idx): os.path.join(image_dir, f)
+            for idx, f in enumerate(sorted(os.listdir(image_dir))) if os.path.splitext(f)[-1] in supported_formats}
 
         if len(self.image_filenames) > 0:
             image = cv2.imread(next(iter(self.image_filenames.values())),
