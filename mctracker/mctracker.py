@@ -208,14 +208,6 @@ class MultiCameraTracker:
             if self.metric.budget is not None:
                 self.metric.samples[_trackid] = self.metric.samples[_trackid][-self.metric.budget:]
 
-        # try:
-        #     self.metric.partial_fit(
-        #         np.asarray(features), np.asarray(targets), active_targets)
-        # except Exception:
-        #     pass
-            # queue the confirmed tracklet into the the target track
-
-        # self.metric.
         return match_indies
             # linear_assignment.min_cost_matching(
             #     gated_metric, self.metric.matching_threshold, self.max_age,

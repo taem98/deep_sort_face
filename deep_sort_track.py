@@ -141,7 +141,7 @@ def run(args):
 
             # Run tracker.
             if args.display:
-                visualizer = ImageLoader(sequence_dir, 5, running_name, args.start_frame, args.crop_area)
+                visualizer = ImageLoader(sequence_dir, 30, running_name, args.start_frame, args.crop_area)
                 if args.save_video:
                     visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:

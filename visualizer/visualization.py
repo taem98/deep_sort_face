@@ -142,6 +142,7 @@ class Visualization(object):
             for idx, t in enumerate(matching):
                 if t[0] == track.track_id:
                     label_str += ":{}".format(t[1])
+                    break
             self.viewer.color = create_unique_color_uchar(track.track_id)
             # self.viewer.rectangle(
             #     *track.to_tlwh().astype(np.int), label=label_str)
