@@ -68,4 +68,10 @@ def parse_args():
     parser.add_argument(
         "--start_frame", help="Starting frame id", type=int, default=0
     )
+
+    parser.add_argument(
+        "--crop_area", nargs='+', help="Optional crop area top, bottom, left, right",
+        default=None, type=int
+    )
+
     return parser

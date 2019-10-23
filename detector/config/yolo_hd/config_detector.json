@@ -1,0 +1,9 @@
+{
+  "name" : "YOLOv3 bdd100k hd",
+  "cfg_path" : "detector/cfg/yolov3_hd.cfg" ,
+  "meta_path" : "detector/cfg/bdd100k_hd.data" ,
+  "weight_path" : "tmp/yolov3_hd_last.weights",
+  "sharelibPath" : "./libdarknet.so",
+  "metaFile" : "detector/data/bdd100k.names",
+  "class_filter" : [1, 2, 9]
+}

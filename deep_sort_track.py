@@ -100,7 +100,7 @@ def run(args):
 
                 detections = encoder(frame, raw_detections, frame_idx)
 
-                detections = [d for d in detections if d.confidence >= args.min_confidence]
+                detections = [d for d in detections if d.confidence >= args.min_confidence and d.tlwh[3] > args.min_detection_height]
 
                 # Run non-maxima suppression.
                 boxes = np.array([d.tlwh for d in detections])
@@ -141,7 +141,7 @@ def run(args):
 
             # Run tracker.
             if args.display:
-                visualizer = ImageLoader(sequence_dir, 5, running_name, args.start_frame)
+                visualizer = ImageLoader(sequence_dir, 5, running_name, args.start_frame, args.crop_area)
                 if args.save_video:
                     visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=5)
             else:

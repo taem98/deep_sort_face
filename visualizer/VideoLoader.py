@@ -44,7 +44,7 @@ class VideoLoader(Visualization):
             return False
 
 class ImageLoader(Visualization):
-    def __init__(self, image_dir, update_ms, running_name="", starting_frameid=0):
+    def __init__(self, image_dir, update_ms, running_name="", starting_frameid=0, crop_area=None):
         supported_formats = [".png", ".jpg"]
 
         self.image_filenames = {
@@ -54,7 +54,14 @@ class ImageLoader(Visualization):
         if len(self.image_filenames) > 0:
             image = cv2.imread(next(iter(self.image_filenames.values())),
                                cv2.IMREAD_GRAYSCALE)
-            image_size = image.shape
+
+            self.crop_image = crop_area
+            if self.crop_image:
+                image_size = (image.shape[0] - self.crop_image[0] - self.crop_image[1], image.shape[1] - self.crop_image[2] - self.crop_image[3])
+            else:
+                image_size = image.shape
+            image_ratio = int(image_size[1]) / int(image_size[0])
+            print("IMAGE SIZE: {} RATIO: {}".format(image_size, image_ratio))
         else:
             image_size = None
 
@@ -84,7 +91,14 @@ class ImageLoader(Visualization):
         # _t0 = time.time()
         image = cv2.imread(self.image_filenames[self.frame_idx], cv2.IMREAD_COLOR)
         # _t1 = time.time() - _t0
-        frame_callback(self, image, self.frame_idx)
+        if self.crop_image:
+            sx = self.crop_image[2]
+            sy = self.crop_image[0]
+            ex = image.shape[1] - self.crop_image[2] - self.crop_image[3]
+            ey = image.shape[0] - self.crop_image[1] - self.crop_image[2]
+            frame_callback(self, image[sy:ey, sx:ex], self.frame_idx)
+        else:
+            frame_callback(self, image, self.frame_idx)
         # self.viewer.annotate(4, 50, "io_fps {:03.1f}".format(1 / _t1))
         self.frame_idx += 1
         return True
