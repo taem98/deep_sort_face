@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 
 class kitti_tag(object):
     def __init__(self):
@@ -41,32 +40,33 @@ class Evaluator(object):
             self._results.append([0, 0, "DontCare", 0, 0, 0, 0])
         kitti_eval_dir = os.path.join(output_dir, "data")
         os.makedirs(kitti_eval_dir, exist_ok=True)
-
-        df = pd.DataFrame(self._results)
-        df.columns = self.tag.tag_2d_res
-        if self.fmt == 'kitti':
-            df[self.tag.rot_y] = 0
-            ignore_tag_1 = [self.tag.truncated, self.tag.occluded, self.tag.alpha, self.tag.hdim, self.tag.wdim, self.tag.ldim]
-            for t in ignore_tag_1:
-                df[t] = 0
-            ignore_tag_2 = [self.tag.locx, self.tag.locy, self.tag.locz]
-            for t in ignore_tag_2:
-                df[t] = -1000
-
-            df.to_csv(os.path.join(kitti_eval_dir, "%s.txt" % sequence), sep = " ", header=False, index=False,
-                      columns=self.tag.gt_column_tag)
+        try:
+            import pandas as pd
+            df = pd.DataFrame(self._results)
+            df.columns = self.tag.tag_2d_res
+            if self.fmt == 'kitti':
+                df[self.tag.rot_y] = 0
+                ignore_tag_1 = [self.tag.truncated, self.tag.occluded, self.tag.alpha, self.tag.hdim, self.tag.wdim,
+                                self.tag.ldim]
+                for t in ignore_tag_1:
+                    df[t] = 0
+                ignore_tag_2 = [self.tag.locx, self.tag.locy, self.tag.locz]
+                for t in ignore_tag_2:
+                    df[t] = -1000
+                df.to_csv(os.path.join(kitti_eval_dir, "%s.txt" % sequence), sep=" ", header=False, index=False,
+                          columns=self.tag.gt_column_tag)
+        except ImportError:
+            with open(os.path.join(kitti_eval_dir, "%s.txt" % sequence), 'w') as f:
+                for row in self._results:
+                     print('%d %d %s 0 0 0 %.2f %.2f %.2f %.2f 0 0 0 -1000 -1000 -1000 0' % (
+                        row[0], row[1], row[2], row[3], row[4], row[5], row[6]), file=f)
 
         self._results = []
-        # with open(os.path.join(output_dir, "%s.txt" % sequence), 'w') as f:
-            # for row in self._results:
-            #     # if not loading_groundtruth and eval_3d is True and(t_data.X==-1000 or t_data.Y==-1000 or t_data.Z==-1000):
-            #     #
-            #     # print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
-            #     #     row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
-            #     # KITTI_LABEL = ["frame", "track_id", "class_name", "truncated",
-            #     #                "occluded", "alpha", "bbox_l", "bbox_t",
-            #     #                "bbox_r", "bbox_b", "hdim", "wdim",
-            #     #                "ldim", "locx", "locy", "locz", "rot_y"]
-            #
-            #     print('%d %d %s 0 0 0 %.2f %.2f %.2f %.2f 0 0 0 -1000 -1000 -1000 0' % (
-            #         row[0], row[1], row[2], row[3], row[4], row[5], row[6]), file=f)
+        # if not loading_groundtruth and eval_3d is True and(t_data.X==-1000 or t_data.Y==-1000 or t_data.Z==-1000):
+        #
+        # print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
+        #     row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
+        # KITTI_LABEL = ["frame", "track_id", "class_name", "truncated",
+        #                "occluded", "alpha", "bbox_l", "bbox_t",
+        #                "bbox_r", "bbox_b", "hdim", "wdim",
+        #                "ldim", "locx", "locy", "locz", "rot_y"]

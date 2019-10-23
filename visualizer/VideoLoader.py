@@ -94,8 +94,8 @@ class ImageLoader(Visualization):
         if self.crop_image:
             sx = self.crop_image[2]
             sy = self.crop_image[0]
-            ex = image.shape[1] - self.crop_image[2] - self.crop_image[3]
-            ey = image.shape[0] - self.crop_image[1] - self.crop_image[2]
+            ex = image.shape[1] - self.crop_image[3]
+            ey = image.shape[0] - self.crop_image[2]
             frame_callback(self, image[sy:ey, sx:ex], self.frame_idx)
         else:
             frame_callback(self, image, self.frame_idx)

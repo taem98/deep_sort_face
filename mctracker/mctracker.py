@@ -116,10 +116,10 @@ class MultiCameraTracker:
                 self.client_stub = embs_pb2_grpc.EmbServerStub(self.client_channel)
                 # send to test the connection
                 respond = self.client_stub.sendCommand(cmds)
-                print("Connect to {} success res".format(addr, respond.respondid))
+                print("Established the connection to {} success".format(addr, respond.respondid))
                 break
             except Exception as e:
-                print(e)
+                # print(e)
                 self.client_channel = None
         if self.client_channel is None:
             raise Exception("Cannot connect to server")
@@ -192,7 +192,7 @@ class MultiCameraTracker:
         # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
-            linear_assignment.min_cost_matching(distance_metric, self.metric.matching_threshold, self._single_tracker.tracks,
+            linear_assignment.min_cost_matching(distance_metric, 0.5, self._single_tracker.tracks,
                                                 _features, confirmed_tracks, detection_indices)
         # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
         #                  _detections[detection_idx, 1].astype(np.int))
