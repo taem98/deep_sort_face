@@ -138,6 +138,19 @@ class MultiCameraTracker:
         self._single_tracker = None
         self.metric = None
 
+        try:
+            respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.STOPPED))
+            respond.respondid = 0
+        except Exception:
+            pass
+
+    def sendAllPayload(self):
+        try:
+            respond = self.client_stub.sendCommand(embs_pb2.command(cmd=embs_pb2.command.TRACKLET_SEND))
+            respond.respondid = 0
+        except Exception:
+            pass
+
     def finished(self):
         if self.running_mode == 1: # this node is the master so we send the cmd to other node
             # while True:
@@ -168,12 +181,28 @@ class MultiCameraTracker:
 
         _detections = []
         _features = []
+
+        while True:
+            try:
+                cmds = self._request_Q.get(block=False)
+                if cmds.cmd == embs_pb2.command.TRACKLET_SEND:
+                    print("Start agrregated {} : {}".format(cmds.cmd, cmds.master_address))
+
+                if cmds.cmd == embs_pb2.command.STOPPED:
+                    print("Remote target has close!!!")
+                    self.running_mode = 0
+                break
+            except Exception:
+                time.sleep(0.1)
+
+
         while not self._payload_Q.empty():
             detection = self._payload_Q.get()
             _detections.append(detection)
             _features.append(detection[10:])
             self._payload_Q.task_done()
-            time.sleep(0.01)
+            # time.sleep(0.01)
+
         _detections = np.asarray(_detections)
         _features = np.asarray(_features)
 

@@ -127,6 +127,7 @@ def run(args):
                     # mctracker.client_Q.put()
                     # left top right bottom
                 # mctracker.broadcastEmb()
+                mctracker.sendAllPayload()
                 matching = mctracker.agrregate(frame_idx)
 
                 # Update visualization.
@@ -134,7 +135,7 @@ def run(args):
                     vis.set_image(frame.copy())
                     vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
                     vis.draw_detections(detections)
-                    vis.draw_trackers_with_othertag(tracker.tracks, matching, False)
+                    vis.draw_trackers_with_othertag(tracker.tracks, matching, False, mctracker.running_mode)
                     vis.viewer.show_image()
                 # notify other tracker or wait here
                 mctracker.finished()

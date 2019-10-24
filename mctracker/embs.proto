@@ -21,6 +21,8 @@ message command {
         PAUSE = 0;
         CONTINUE = 1;
         START = 2;
+        TRACKLET_SEND = 3;
+        STOPPED = 4;
     }
     required Command cmd = 1;
     repeated string master_address = 2;
