@@ -4,9 +4,10 @@ from encoder.PseudoEncoder import PseudoEncoder
 
 class TripletNet(PseudoEncoder):
 
-    def __init__(self, sess, checkpoint_filename, class_filter, altName = None):
+    def __init__(self, sess, checkpoint_filename, class_filter, batch_size=32, altName = None):
 
         super().__init__(None, False, altName)
+        self._batch_size = batch_size
         self._class_filter = class_filter
         self.session = sess
         with tf.gfile.GFile(checkpoint_filename, "rb") as file_handle:
@@ -29,11 +30,11 @@ class TripletNet(PseudoEncoder):
         self.feature_dim = self.output_var.get_shape().as_list()[-1]
         self.image_shape = self.input_var.get_shape().as_list()[1:]
 
-    def _encode(self, data_x, batch_size=32):
+    def _encode(self, data_x):
         out = np.zeros((len(data_x), self.feature_dim), np.float32)
         run_in_batches(
             lambda x: self.session.run(self.output_var, feed_dict=x),
-            {self.input_var: data_x}, out, batch_size)
+            {self.input_var: data_x}, out, self._batch_size)
         return out
 
     def __del__(self):

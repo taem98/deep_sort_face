@@ -70,7 +70,7 @@ def run(args):
         config.gpu_options.visible_device_list = str(args.gpu)
         config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
         sess = tf.Session(config=config)
-        encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'])
+        encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'], args.extractor_batchsize)
 
     specific_sequence = args.sequence
 

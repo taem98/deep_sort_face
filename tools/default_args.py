@@ -74,4 +74,9 @@ def parse_args():
         default=None, type=int
     )
 
+    parser.add_argument(
+        "--extractor_batchsize", help="Batch size for extractor, change to fit to ram os system",
+        default=32, type=int
+    )
+
     return parser

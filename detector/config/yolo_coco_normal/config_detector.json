@@ -1,0 +1,9 @@
+{
+  "name" : "YOLOv3 coco",
+  "cfg_path" : "../alex_darknet/cfg/yolov3.cfg" ,
+  "meta_path" : "detector/cfg/coco.data" ,
+  "weight_path" : "./tmp/yolov3.weights",
+  "sharelibPath" : "../alex_darknet/libdarknet.so",
+  "metaFile" : "./detector/data/coc.names",
+  "class_filter" : [2, 5, 7]
+}
