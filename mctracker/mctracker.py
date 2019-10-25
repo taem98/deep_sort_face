@@ -16,6 +16,7 @@ sys.path.append(os.path.dirname(__file__))
 
 from mctracker import embs_pb2
 from mctracker import embs_pb2_grpc
+from mctracker.mctrack import McTrack
 
 from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser, ServiceStateChange
 
@@ -63,6 +64,8 @@ class MultiCameraTracker:
         if self.running_mode == 0:
             print("MCT Tracker off")
             return
+
+        self.mctracks = []
 
         self._mc_service = Zeroconf()
         self._server_addr = []
@@ -171,6 +174,22 @@ class MultiCameraTracker:
 
         # otherwise just ignore
 
+    def initialize_ego_track(self, track):
+        for idx, mctrack in enumerate(self.mctracks):
+            if mctrack.ego_track_id == track.track_id:
+                mctrack.ego_hit += 1
+                return idx
+        self.mctracks.append(McTrack(track.track_id, 3, 60))
+        return len(self.mctracks)
+
+    def updated_ego_track(self, track):
+        for idx, mctrack in enumerate(self.mctracks):
+            if mctrack.ego_track_id == track.track_id:
+                # mctrack.ego_hit += 1
+                return idx
+        # self.mctracks.append(McTrack(track.track_id, 2, 60))
+        # return len(self.mctracks)
+
     def agrregate(self, frame_id):
         if self.running_mode == 0:
             return []
@@ -206,6 +225,7 @@ class MultiCameraTracker:
         _detections = np.asarray(_detections)
         _features = np.asarray(_features)
 
+
         def distance_metric(tracks, dets, track_indices, detection_indices):
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(_features, targets)
@@ -221,21 +241,46 @@ class MultiCameraTracker:
         # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
-            linear_assignment.min_cost_matching(distance_metric, 0.5, self._single_tracker.tracks,
+            linear_assignment.min_cost_matching(distance_metric, 0.3, self._single_tracker.tracks,
                                                 _features, confirmed_tracks, detection_indices)
         # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
         #                  _detections[detection_idx, 1].astype(np.int))
         #                 for track_idx, detection_idx in matches_a]
         match_indies = []
         features, targets, active_targets = [], [], []
+
         for track_idx, detection_idx in matches_a:
-            _trackid = self._single_tracker.tracks[track_idx].track_id
-            match_indies.append((_trackid, _detections[detection_idx, 1].astype(np.int)))
-            # features.append()
+            _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
+            # queue the new id
+            self.mctracks[_index].update(_detections[detection_idx,1].astype(np.int), _features[detection_idx])
+        '''
+        the unmatched single tracks and no ego mc tracked can be associate in these situation:
+            * the single tracks is recently appear and mc tracked has send in the past
+            so we do the comparing function one again
+            * 
+        '''
+        for track_idx in unmatched_tracks_a:
+            _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
+            self.mctracks[_index].mark_missed()
+        # for any un-associate pair of object, we create the new trackobject without the ego trackid
+        for detection_idx in unmatched_detections:
+            # may be this node has already here in the remote queue of mctrack, just queue it on
+            for idx, mctrack in enumerate(self.mctracks):
+                _remote_id = _detections[detection_idx, 1].astype(int)
+                if _remote_id in mctrack.remotes_id:
+                    self.mctracks[idx].update(_remote_id, _features[detection_idx])
+
             # targets.append()
-            self.metric.samples.setdefault(self._single_tracker.tracks[track_idx].track_id, []).append(_features[detection_idx])
-            if self.metric.budget is not None:
-                self.metric.samples[_trackid] = self.metric.samples[_trackid][-self.metric.budget:]
+
+
+        for mctrack in self.mctracks:
+            if mctrack.is_confirmed():
+                match_indies.append((mctrack.ego_track_id, mctrack.remotes_id[-1]))
+                for feature in mctrack.features:
+                    self.metric.samples.setdefault(mctrack.ego_track_id, []).append(feature)
+                    if self.metric.budget is not None:
+                        self.metric.samples[mctrack.ego_track_id] = self.metric.samples[mctrack.ego_track_id][-self.metric.budget:]
+                    mctrack.features = []
 
         return match_indies
             # linear_assignment.min_cost_matching(

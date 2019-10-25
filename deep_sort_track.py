@@ -120,6 +120,7 @@ def run(args):
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
                     bbox = track.to_tlbr()
+                    mctracker.initialize_ego_track(track)
                     mctracker.broadcast(encoder.update_trackid(track.detection_id, track.track_id))
                     class_id = encoder.get_class_id(track.detection_id)
                     class_name = detector.altNames[class_id]
@@ -128,8 +129,12 @@ def run(args):
                     # left top right bottom
                 # mctracker.broadcastEmb()
                 mctracker.sendAllPayload()
-                matching = mctracker.agrregate(frame_idx)
 
+                try:
+                    matching = mctracker.agrregate(frame_idx)
+                except Exception as e:
+                    print(e)
+                    matching = []
                 # Update visualization.
                 if args.display:
                     vis.set_image(frame.copy())
