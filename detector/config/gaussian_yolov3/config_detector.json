@@ -1,0 +1,9 @@
+{
+  "name" : "Gaussian YOLOv3 bdd100k 416x416",
+  "cfg_path" : "./detector/cfg/Gaussian_yolov3_BDD.cfg" ,
+  "meta_path" : "./detector/cfg/BDD.data" ,
+  "weight_path" : "./tmp/Gaussian_yolov3_BDD.weights",
+  "sharelibPath" : "../alex_darknet/libdarknet.so",
+  "metaFile" : "detector/data/bdd.names",
+  "class_filter" : [1, 2, 9]
+}

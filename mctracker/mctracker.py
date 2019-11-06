@@ -175,6 +175,8 @@ class MultiCameraTracker:
         # otherwise just ignore
 
     def initialize_ego_track(self, track):
+        if self.running_mode == 0:
+            return
         for idx, mctrack in enumerate(self.mctracks):
             if mctrack.ego_track_id == track.track_id:
                 mctrack.ego_hit += 1
@@ -227,8 +229,9 @@ class MultiCameraTracker:
 
 
         def distance_metric(tracks, dets, track_indices, detection_indices):
+            features = np.array([dets[i].feature for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
-            cost_matrix = self.metric.distance(_features, targets)
+            cost_matrix = self.metric.distance(features, targets)
             return cost_matrix
         # we get the 2 previous frame from other camera
 
