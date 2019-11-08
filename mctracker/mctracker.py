@@ -321,6 +321,9 @@ class MultiCameraTracker:
                     info = zeroconf.get_service_info(service_type, name)
                     if info:
                         addresses.extend(["%s:%d" % (socket.inet_ntoa(addr), cast(int, info.port)) for addr in info.addresses])
+                        # fix a wierd zeroconf bug
+                        for addr1 in info.properties.values():
+                            addresses.append("%s:%d" % (socket.inet_ntoa(addr1), cast(int, info.port)))
                         print("  Addresses: %s" % ", ".join(addresses))
 
             browser = ServiceBrowser(self._mc_service, "_mctracker._tcp.local.", handlers=[on_service_state_change])
@@ -345,15 +348,16 @@ class MultiCameraTracker:
             bind_port = find_free_port()[1]
 
         addrs = find_local_address()
-        desc = {'version': '0.10', 'a': 'test value', 'b': 'another value'}
+        # we have some weird bug that address is not fully send so we add to desc
+        desc = {str(idx):socket.inet_aton(addr) for idx, addr in enumerate(addrs)}
+        info = ServiceInfo(
+            "_mctracker._tcp.local.",
+            "{}._mctracker._tcp.local.".format(name),
+            addresses=[socket.inet_aton(addr) for addr in addrs],
+            port=bind_port,
+            properties=desc,
+        )
         try:
-            info = ServiceInfo(
-                "_mctracker._tcp.local.",
-                "{}._mctracker._tcp.local.".format(name),
-                addresses=[socket.inet_aton(addr) for addr in addrs],
-                port=bind_port,
-                properties=desc,
-            )
             self._mc_service.register_service(info)
         except Exception as e:
             print("Annce service faild, you have to mannually select the address")

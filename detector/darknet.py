@@ -59,7 +59,8 @@ class DETECTION(Structure):
                 ("prob", POINTER(c_float)),
                 ("mask", POINTER(c_float)),
                 ("objectness", c_float),
-                ("sort_class", c_int)]
+                ("sort_class", c_int),
+                ("uc", POINTER(c_float))]
 
 
 class IMAGE(Structure):
@@ -74,7 +75,7 @@ class METADATA(Structure):
 
 
 
-#lib = CDLL("/home/pjreddie/documents/detector/libdarknet.so", RTLD_GLOBAL)
+#lib = CDLL("/home/pjreddie/documents/darknet/libdarknet.so", RTLD_GLOBAL)
 #lib = CDLL("libdarknet.so", RTLD_GLOBAL)
 hasGPU = True
 if os.name == "nt":
