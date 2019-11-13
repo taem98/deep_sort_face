@@ -201,7 +201,7 @@ class MultiCameraTracker:
             return []
 
         _detections = []
-        _features = []
+        # _features = []
 
         while True:
             try:
@@ -220,16 +220,16 @@ class MultiCameraTracker:
         while not self._payload_Q.empty():
             detection = self._payload_Q.get()
             _detections.append(detection)
-            _features.append(detection[10:])
+            # _features.append(detection[10:])
             self._payload_Q.task_done()
             # time.sleep(0.01)
 
         _detections = np.asarray(_detections)
-        _features = np.asarray(_features)
+        # _features = np.asarray(_features)
 
 
         def distance_metric(tracks, dets, track_indices, detection_indices):
-            features = np.array([dets[i].feature for i in detection_indices])
+            features = np.array([dets[i, :] for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(features, targets)
             return cost_matrix
@@ -245,7 +245,7 @@ class MultiCameraTracker:
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
             linear_assignment.min_cost_matching(distance_metric, 0.3, self._single_tracker.tracks,
-                                                _features, confirmed_tracks, detection_indices)
+                                                _detections[:,10:], confirmed_tracks, detection_indices)
         # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
         #                  _detections[detection_idx, 1].astype(np.int))
         #                 for track_idx, detection_idx in matches_a]
@@ -255,7 +255,7 @@ class MultiCameraTracker:
         for track_idx, detection_idx in matches_a:
             _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
             # queue the new id
-            self.mctracks[_index].update(_detections[detection_idx,1].astype(np.int), _features[detection_idx])
+            self.mctracks[_index].update(_detections[detection_idx,1].astype(np.int), _detections[detection_idx, 10:])
         '''
         the unmatched single tracks and no ego mc tracked can be associate in these situation:
             * the single tracks is recently appear and mc tracked has send in the past
@@ -271,7 +271,7 @@ class MultiCameraTracker:
             for idx, mctrack in enumerate(self.mctracks):
                 _remote_id = _detections[detection_idx, 1].astype(int)
                 if _remote_id in mctrack.remotes_id:
-                    self.mctracks[idx].update(_remote_id, _features[detection_idx])
+                    self.mctracks[idx].update(_remote_id, _detections[detection_idx, 10:])
 
             # targets.append()
 
