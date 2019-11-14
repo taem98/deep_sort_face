@@ -76,6 +76,10 @@ class Detector(PseudoDetector):
         if os.name == "nt":
             raise Exception("Windows is not support")
         else:
+            from detector import ROOT_DIR
+            if not len(sharelibPath) > 0:
+                sharelibPath = os.path.join(ROOT_DIR, "darknet", "libdarknet.so")
+            print("Open share lib in %s"%sharelibPath)
             self.lib = CDLL(sharelibPath, RTLD_GLOBAL)
         self.nw_width = self.lib.network_width
         self.nw_width.argtypes = [c_void_p]
