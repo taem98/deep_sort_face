@@ -180,9 +180,19 @@ class MultiCameraTracker:
         for idx, mctrack in enumerate(self.mctracks):
             if mctrack.ego_track_id == track.track_id:
                 mctrack.ego_hit += 1
+                mctrack.ego_time_since_update = 0
+                mctrack.is_ego_updated = True
                 return idx
         self.mctracks.append(McTrack(track.track_id, 3, 60))
         return len(self.mctracks)
+
+    def filter_missing_track(self):
+        for mctrack in self.mctracks:
+            if mctrack.is_ego_updated == True:
+                mctrack.ego_time_since_update = 0
+                mctrack.is_ego_updated = False
+            else:
+                mctrack.ego_time_since_update += 1
 
     def updated_ego_track(self, track):
         for idx, mctrack in enumerate(self.mctracks):
@@ -250,7 +260,7 @@ class MultiCameraTracker:
         #                  _detections[detection_idx, 1].astype(np.int))
         #                 for track_idx, detection_idx in matches_a]
         match_indies = []
-        features, targets, active_targets = [], [], []
+        # features, targets, active_targets = [], [], []
 
         for track_idx, detection_idx in matches_a:
             _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])

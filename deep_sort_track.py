@@ -91,6 +91,7 @@ def run(args):
                 "cosine", args.max_cosine_distance, args.nn_budget)
             tracker = Tracker(metric, max_iou_distance=0.6)
             mctracker.updateSingleTracker(tracker, metric)
+            
             def frame_callback(vis, frame, frame_idx):
                 print("Processing frame %05d" % frame_idx)
 
@@ -128,6 +129,7 @@ def run(args):
                     # mctracker.client_Q.put()
                     # left top right bottom
                 # mctracker.broadcastEmb()
+                mctracker.filter_missing_track()
                 mctracker.sendAllPayload()
 
                 try:

@@ -45,11 +45,11 @@ class McTrack:
          Covariance matrix of the initial state distribution.
      ego_track_id : int
          A unique track identifier.
-     hits : int
+     remote_hits : int
          Total number of measurement updates.
      age : int
          Total number of frames since first occurance.
-     time_since_update : int
+     remote_time_since_update : int
          Total number of frames since last measurement update.
      state : TrackState
          The current track state.
@@ -62,9 +62,10 @@ class McTrack:
     def __init__(self, ego_track_id, n_init, max_age,
                  feature=None, detection_id=0):
         self.ego_track_id = ego_track_id
-        self.hits = 1
+        self.remote_hits = 0
         self.age = 1
-        self.time_since_update = 0
+        self.is_ego_updated = True
+        self.ego_time_since_update = 0
         self.ego_hit = 1
         self.state = TrackState.Tentative
         self.features = []
@@ -72,7 +73,9 @@ class McTrack:
 
         if feature is not None:
             self.features.append(feature)
+
         self.remotes_id = []
+        self.remote_time_since_update = 0
         # if label is not None:
         self.detection_id = detection_id
         self._n_init = n_init
@@ -118,7 +121,7 @@ class McTrack:
 
         """
         self.age += 1
-        self.time_since_update += 1
+        self.remote_time_since_update += 1
 
     def update(self, id, feature):
         """Perform Kalman filter measurement update step and update the feature
@@ -135,9 +138,9 @@ class McTrack:
         # self.detection_bboxs = detection.tlwh.copy()
         self.remotes_id.append(id)
         self.features.append(feature)
-        self.hits += 1
-        self.time_since_update = 0
-        if self.state == TrackState.Tentative and self.hits >= self._n_init:
+        self.remote_hits += 1
+        self.remote_time_since_update = 0
+        if self.state == TrackState.Tentative and self.remote_hits >= self._n_init:
             self.state = TrackState.Confirmed
 
     def mark_missed(self):
@@ -145,7 +148,7 @@ class McTrack:
         """
         if self.state == TrackState.Tentative:
             self.state = TrackState.Deleted
-        elif self.time_since_update > self._max_age:
+        elif self.remote_time_since_update > self._max_age:
             self.state = TrackState.Deleted
 
     def is_tentative(self):
