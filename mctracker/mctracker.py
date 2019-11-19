@@ -67,6 +67,8 @@ class MultiCameraTracker:
 
         self.mctracks = []
 
+        self.orphane_tracklets = []
+
         self._mc_service = Zeroconf()
         self._server_addr = []
         if self.running_mode == 1:
@@ -188,6 +190,8 @@ class MultiCameraTracker:
 
     def filter_missing_track(self):
         for mctrack in self.mctracks:
+            mctrack.age += 1
+            mctrack.remote_time_since_update += 1
             if mctrack.is_ego_updated == True:
                 mctrack.ego_time_since_update = 0
                 mctrack.is_ego_updated = False
@@ -280,20 +284,27 @@ class MultiCameraTracker:
             # may be this node has already here in the remote queue of mctrack, just queue it on
             for idx, mctrack in enumerate(self.mctracks):
                 _remote_id = _detections[detection_idx, 1].astype(int)
-                if _remote_id in mctrack.remotes_id:
+                if _remote_id in mctrack.remotes_id.keys():
                     self.mctracks[idx].update(_remote_id, _detections[detection_idx, 10:])
 
             # targets.append()
+        # return match_indies
 
-
-        for mctrack in self.mctracks:
+        for idx, mctrack in enumerate(self.mctracks):
             if mctrack.is_confirmed():
-                match_indies.append((mctrack.ego_track_id, mctrack.remotes_id[-1]))
-                for feature in mctrack.features:
+                max_id = 0
+                max_hits = 0
+                # print(type(mctrack.remotes_id))
+                for idx, id in enumerate(mctrack.remotes_id.keys()):
+                    if max_hits < mctrack.remotes_id[id]:
+                        max_id = id
+                        max_hits = mctrack.remotes_id[id]
+                match_indies.append((mctrack.ego_track_id, max_id))
+                for feature in mctrack.features[max_id]:
                     self.metric.samples.setdefault(mctrack.ego_track_id, []).append(feature)
                     if self.metric.budget is not None:
                         self.metric.samples[mctrack.ego_track_id] = self.metric.samples[mctrack.ego_track_id][-self.metric.budget:]
-                    mctrack.features = []
+                mctrack.features[max_id] = []
 
         return match_indies
             # linear_assignment.min_cost_matching(

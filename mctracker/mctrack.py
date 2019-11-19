@@ -68,13 +68,11 @@ class McTrack:
         self.ego_time_since_update = 0
         self.ego_hit = 1
         self.state = TrackState.Tentative
-        self.features = []
+
         self.detection_bboxs = None
 
-        if feature is not None:
-            self.features.append(feature)
-
-        self.remotes_id = []
+        self.features = {}
+        self.remotes_id = {}
         self.remote_time_since_update = 0
         # if label is not None:
         self.detection_id = detection_id
@@ -110,7 +108,7 @@ class McTrack:
         ret[2:] = ret[:2] + ret[2:]
         return ret
 
-    def predict(self, kf):
+    def predict(self):
         """Propagate the state distribution to the current time step using a
         Kalman filter prediction step.
 
@@ -136,8 +134,10 @@ class McTrack:
 
         """
         # self.detection_bboxs = detection.tlwh.copy()
-        self.remotes_id.append(id)
-        self.features.append(feature)
+
+        hit = self.remotes_id.setdefault(id, 0)
+        self.remotes_id[id] = hit + 1
+        self.features.setdefault(id, []).append(feature)
         self.remote_hits += 1
         self.remote_time_since_update = 0
         if self.state == TrackState.Tentative and self.remote_hits >= self._n_init:
