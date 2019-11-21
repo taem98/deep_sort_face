@@ -65,7 +65,7 @@ class MultiCameraTracker:
             print("MCT Tracker off")
             return
 
-        self.mctracks = []
+        self.mctracks = {}
 
         self.orphane_tracklets = []
 
@@ -179,17 +179,15 @@ class MultiCameraTracker:
     def initialize_ego_track(self, track):
         if self.running_mode == 0:
             return
-        for idx, mctrack in enumerate(self.mctracks):
-            if mctrack.ego_track_id == track.track_id:
-                mctrack.ego_hit += 1
-                mctrack.ego_time_since_update = 0
-                mctrack.is_ego_updated = True
-                return idx
-        self.mctracks.append(McTrack(track.track_id, 3, 60))
-        return len(self.mctracks)
+        mctrack = self.mctracks.setdefault(track.track_id, McTrack(track.track_id, 3, 60))
+        mctrack.ego_hit += 1
+        mctrack.ego_time_since_update = 0
+        mctrack.is_ego_updated = True
 
     def filter_missing_track(self):
-        for mctrack in self.mctracks:
+        if self.running_mode == 0:
+            return
+        for key, mctrack in self.mctracks.items():
             mctrack.age += 1
             mctrack.remote_time_since_update += 1
             if mctrack.is_ego_updated == True:
@@ -217,18 +215,18 @@ class MultiCameraTracker:
         _detections = []
         # _features = []
 
-        while True:
-            try:
-                cmds = self._request_Q.get(block=False)
-                if cmds.cmd == embs_pb2.command.TRACKLET_SEND:
-                    print("Start agrregated {} : {}".format(cmds.cmd, cmds.master_address))
-
-                if cmds.cmd == embs_pb2.command.STOPPED:
-                    print("Remote target has close!!!")
-                    self.running_mode = 0
-                break
-            except Exception:
-                time.sleep(0.1)
+        # while True:
+        #     try:
+        #         cmds = self._request_Q.get(block=False)
+        #         if cmds.cmd == embs_pb2.command.TRACKLET_SEND:
+        #             print("Start agrregated {} : {}".format(cmds.cmd, cmds.master_address))
+        #
+        #         if cmds.cmd == embs_pb2.command.STOPPED:
+        #             print("Remote target has close!!!")
+        #             self.running_mode = 0
+        #         break
+        #     except Exception:
+        #         time.sleep(0.1)
 
 
         while not self._payload_Q.empty():
@@ -253,6 +251,9 @@ class MultiCameraTracker:
             return []
 
         detection_indices = list(range(len(_detections)))
+
+        # we should group the data
+
         confirmed_tracks = [
             i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
         # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
@@ -267,9 +268,9 @@ class MultiCameraTracker:
         # features, targets, active_targets = [], [], []
 
         for track_idx, detection_idx in matches_a:
-            _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
             # queue the new id
-            self.mctracks[_index].update(_detections[detection_idx,1].astype(np.int), _detections[detection_idx, 10:])
+            ego_id = self._single_tracker.tracks[track_idx].track_id
+            self.mctracks[ego_id].update(_detections[detection_idx,1].astype(np.int), _detections[detection_idx, 10:])
         '''
         the unmatched single tracks and no ego mc tracked can be associate in these situation:
             * the single tracks is recently appear and mc tracked has send in the past
@@ -277,28 +278,27 @@ class MultiCameraTracker:
             * 
         '''
         for track_idx in unmatched_tracks_a:
-            _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
-            self.mctracks[_index].mark_missed()
+            # _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
+            ego_id = self._single_tracker.tracks[track_idx].track_id
+            self.mctracks[ego_id].mark_missed()
         # for any un-associate pair of object, we create the new trackobject without the ego trackid
         for detection_idx in unmatched_detections:
             # may be this node has already here in the remote queue of mctrack, just queue it on
-            for idx, mctrack in enumerate(self.mctracks):
+            for key, mctrack in self.mctracks.items():
                 _remote_id = _detections[detection_idx, 1].astype(int)
                 if _remote_id in mctrack.remotes_id.keys():
-                    self.mctracks[idx].update(_remote_id, _detections[detection_idx, 10:])
+                    self.mctracks[key].update(_remote_id, _detections[detection_idx, 10:])
+                    break
 
-            # targets.append()
-        # return match_indies
-
-        for idx, mctrack in enumerate(self.mctracks):
+        for mctrack in self.mctracks.values():
             if mctrack.is_confirmed():
                 max_id = 0
                 max_hits = 0
                 # print(type(mctrack.remotes_id))
-                for idx, id in enumerate(mctrack.remotes_id.keys()):
-                    if max_hits < mctrack.remotes_id[id]:
-                        max_id = id
-                        max_hits = mctrack.remotes_id[id]
+                for idx, hits in mctrack.remotes_id.items():
+                    if max_hits < hits:
+                        max_id = idx
+                        max_hits = hits
                 match_indies.append((mctrack.ego_track_id, max_id))
                 for feature in mctrack.features[max_id]:
                     self.metric.samples.setdefault(mctrack.ego_track_id, []).append(feature)

@@ -130,7 +130,7 @@ def run(args):
                     # left top right bottom
                 # mctracker.broadcastEmb()
                 mctracker.filter_missing_track()
-                mctracker.sendAllPayload()
+                # mctracker.sendAllPayload()
 
                 try:
                     matching = mctracker.agrregate(frame_idx)
