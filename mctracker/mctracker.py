@@ -250,45 +250,48 @@ class MultiCameraTracker:
         if len(_detections) == 0:
             return []
 
-        detection_indices = list(range(len(_detections)))
-
-        # we should group the data
-
         confirmed_tracks = [
             i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
-        # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
-        # Associate confirmed tracks using appearance features.
-        matches_a, unmatched_tracks_a, unmatched_detections = \
-            linear_assignment.min_cost_matching(distance_metric, 0.3, self._single_tracker.tracks,
-                                                _detections[:,10:], confirmed_tracks, detection_indices)
-        # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
-        #                  _detections[detection_idx, 1].astype(np.int))
-        #                 for track_idx, detection_idx in matches_a]
-        match_indies = []
-        # features, targets, active_targets = [], [], []
 
-        for track_idx, detection_idx in matches_a:
-            # queue the new id
-            ego_id = self._single_tracker.tracks[track_idx].track_id
-            self.mctracks[ego_id].update(_detections[detection_idx,1].astype(np.int), _detections[detection_idx, 10:])
-        '''
-        the unmatched single tracks and no ego mc tracked can be associate in these situation:
-            * the single tracks is recently appear and mc tracked has send in the past
-            so we do the comparing function one again
-            * 
-        '''
-        for track_idx in unmatched_tracks_a:
-            # _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
-            ego_id = self._single_tracker.tracks[track_idx].track_id
-            self.mctracks[ego_id].mark_missed()
-        # for any un-associate pair of object, we create the new trackobject without the ego trackid
-        for detection_idx in unmatched_detections:
-            # may be this node has already here in the remote queue of mctrack, just queue it on
-            for key, mctrack in self.mctracks.items():
-                _remote_id = _detections[detection_idx, 1].astype(int)
-                if _remote_id in mctrack.remotes_id.keys():
-                    self.mctracks[key].update(_remote_id, _detections[detection_idx, 10:])
-                    break
+        # we should group the the detections by frame time
+        frame_ids = np.unique(_detections[:, 0]).astype(np.int)
+        for frame_id in frame_ids:
+            mask = _detections[:, 0].astype(np.int) == frame_id
+            split_detection = _detections[mask]
+            detection_indices = list(range(len(split_detection)))
+            # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
+            # Associate confirmed tracks using appearance features.
+            matches_a, unmatched_tracks_a, unmatched_detections = \
+                linear_assignment.min_cost_matching(distance_metric, 0.3, self._single_tracker.tracks,
+                                                    split_detection[:,10:], confirmed_tracks, detection_indices)
+            # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
+            #                  _detections[detection_idx, 1].astype(np.int))
+            #                 for track_idx, detection_idx in matches_a]
+            match_indies = []
+            # features, targets, active_targets = [], [], []
+
+            for track_idx, detection_idx in matches_a:
+                # queue the new id
+                ego_id = self._single_tracker.tracks[track_idx].track_id
+                self.mctracks[ego_id].update(split_detection[detection_idx,1].astype(np.int), split_detection[detection_idx, 10:])
+            '''
+            the unmatched single tracks and no ego mc tracked can be associate in these situation:
+                * the single tracks is recently appear and mc tracked has send in the past
+                so we do the comparing function one again
+                * 
+            '''
+            for track_idx in unmatched_tracks_a:
+                # _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
+                ego_id = self._single_tracker.tracks[track_idx].track_id
+                self.mctracks[ego_id].mark_missed()
+            # for any un-associate pair of object, we create the new trackobject without the ego trackid
+            for detection_idx in unmatched_detections:
+                # may be this node has already here in the remote queue of mctrack, just queue it on
+                for key, mctrack in self.mctracks.items():
+                    _remote_id = _detections[detection_idx, 1].astype(int)
+                    if _remote_id in mctrack.remotes_id.keys():
+                        self.mctracks[key].update(_remote_id, _detections[detection_idx, 10:])
+                        break
 
         for mctrack in self.mctracks.values():
             if mctrack.is_confirmed():
