@@ -12,6 +12,7 @@ from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from detector.DarknetDetector import Detector
+from detector.TensorFlowDetector import TensorFlowDetector
 from detector.PseudoDetector import PseudoDetector, NoneDetector
 from visualizer.VideoLoader import VideoLoader, ImageLoader, NdImageLoader
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
@@ -56,20 +57,22 @@ def run(args):
         print(e)
         print("MUST CONFIGURE THE CORRECT config_detector and config_extractor file")
         return
+    config = tf.ConfigProto()
+    # config.gpu_options.per_process_gpu_memory_fraction = 0.1
+    config.gpu_options.visible_device_list = str(args.gpu)
+    config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+    sess = tf.Session(config=config)
 
     if running_cfg == "from_detect":
         print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
         print("Detector config: %s" % detection_cfg['name'])
-        detector = Detector(configPath=detection_cfg['cfg_path'], metaPath=detection_cfg['meta_path'],
-                            weightPath=detection_cfg['weight_path'], sharelibPath=detection_cfg['sharelibPath'],
-                            gpu_num=args.gpu)
+
+        frozenpb = r"/home/msis_member/.keras/datasets/faster_rcnn_resnet101_kitti_2018_01_28/frozen_inference_graph.pb"
+        metaPath = r"/home/msis_member/Project/deep_sort/detector/data/kitti_tensorflow.names"
+        detector = TensorFlowDetector(sess, frozenpb, class_filter=None, altName=metaPath)
     if running_cfg == "from_detect" or running_cfg == "from_encoded":
         print("Extractor config: %s" % extractor_cfg['name'])
-        config = tf.ConfigProto()
-        # config.gpu_options.per_process_gpu_memory_fraction = 0.1
-        config.gpu_options.visible_device_list = str(args.gpu)
-        config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
-        sess = tf.Session(config=config)
+
         encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'], args.extractor_batchsize)
 
     specific_sequence = args.sequence
