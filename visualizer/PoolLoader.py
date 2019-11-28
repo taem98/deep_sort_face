@@ -191,7 +191,6 @@ class PoolLoader(object):
         while True:
             try:
                 img = self._reading_queue.get_nowait()
-                self._reading_queue.task_done()
                 break
             except Exception:
                 if self._loadingState == ThreadState.Finished: # this mean loading thread has already finish loading the whole sequence
@@ -206,7 +205,7 @@ class PoolLoader(object):
                 time.sleep(0.01)
 
         # if self._is_not_loading:
-
+        self._reading_queue.task_done()
         self.frame_index += 1
         return self.frame_index - 1, img
 
@@ -267,12 +266,30 @@ class PoolLoader(object):
             self.rectangle(*detection.tlwh, label=str(int(detection.label)), pos=1)
 
     def queue_detection(self, detections):
-        while True:
+        while self.seq_info["show_detections"]:
             try:
                 self._detection_queue.put_nowait(detections)
                 return
             except Exception:
                 time.sleep(0.01)
+
+    def queue_tracklets(self, tracks):
+        confirmed_tracked = []
+        for track in tracks:
+            if not track.is_confirmed() or track.time_since_update > 0:
+                continue
+            confirmed_tracked.append(track)
+            # self.viewer.color = create_unique_color_uchar(track.track_id)
+            # self.viewer.rectangle(
+            #     *track.to_tlwh().astype(np.int), label=str(track.track_id))
+
+        while self.seq_info["show_tracklets"]:
+            try:
+                self._tracker_queue.put_nowait(confirmed_tracked)
+                return
+            except Exception:
+                time.sleep(0.01)
+
 
     def _display_image(self):
         '''
@@ -280,7 +297,7 @@ class PoolLoader(object):
         is multiple sequence
         :return: None
         '''
-        is_cv_show = False
+        # is_cv_show = False
         self._displayState = ThreadState.Init
         while True:
 
@@ -292,6 +309,7 @@ class PoolLoader(object):
                     if self._displayState == ThreadState.Running:
                         self.image[:] = 0
                         cv2.destroyWindow(self.window_name)
+                        print("Finished {}".format(self.window_name))
                         self._displayState = ThreadState.Finished
                     time.sleep(0.1)
                     continue
@@ -303,24 +321,30 @@ class PoolLoader(object):
                 time.sleep(0.01)
                 continue
 
-            # while True:
-            #     try:
-            #         detections = self._detection_queue.get_nowait()
-            #         break
-            #     except Exception:
-            #         time.sleep(0.001)
-            #
-            # self.thickness = 2
-            # self.color = 0, 0, 255
-            # for detection in detections:
-            #     self.rectangle(*detection.tlwh, label=str(int(detection.label)), pos=1)
-            # while True:
-            #     try:
-            #         tracklets = self._tracker_queue.get_nowait()
-            #         break
-            #     except Exception:
-            #         time.sleep(0.001)
-            #
+            while self.seq_info["show_detections"]:
+                try:
+                    detections = self._detection_queue.get_nowait()
+                    self.thickness = 2
+                    self.color = 0, 0, 255
+                    for detection in detections:
+                        self.rectangle(*detection.tlwh, label=str(int(detection.label)), pos=1)
+                    self._detection_queue.task_done()
+                    break
+                except Exception:
+                    time.sleep(0.001)
+
+            while self.seq_info["show_tracklets"]:
+                try:
+                    tracks = self._tracker_queue.get_nowait()
+                    # self.thickness = 2
+                    for track in tracks:
+                        self.color = create_unique_color_uchar(track.track_id)
+                        self.rectangle(
+                            *track.to_tlwh().astype(np.int), label=str(track.track_id))
+                    break
+                except Exception:
+                    time.sleep(0.001)
+
             resized_img = cv2.resize(self.image, self._image_shape[:2])
             cv2.imshow(self.window_name, resized_img)
             is_cv_show = True
@@ -328,11 +352,13 @@ class PoolLoader(object):
             remaining_time = max(1, int(self.seq_info["update_ms"] - 1e3 * (t1 - t0)))
             key = cv2.waitKey(remaining_time)
 
-        if is_cv_show:
-            self.image[:] = 0
-            cv2.destroyWindow(self.window_name)
+            self._display_queue.task_done()
+
+        self.image[:] = 0
+        cv2.destroyWindow(self.window_name)
 
     def stop(self):
+        print("STOP VISUALIZER NOW")
         self._terminate = True
         self._loading_thread.join()
         self._display_thread.join()
@@ -350,7 +376,8 @@ class PoolLoader(object):
 if __name__ == "__main__":
     seq_info = {}
     seq_info["update_ms"] = 60
-    seq_info["show_detections"] = True
+    seq_info["show_detections"] = False
+    seq_info["show_tracklets"] = False
     pool_display = PoolLoader(None)
 
     dataset = r"/datasets/kitti_tracking/image/"
