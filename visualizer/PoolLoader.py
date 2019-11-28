@@ -59,33 +59,79 @@ def create_unique_color_uchar(tag, hue_step=0.41):
     return int(255*r), int(255*g), int(255*b)
 
 
+class ThreadState:
+    """
+    Enumeration type for the single target track state. Newly created tracks are
+    classified as `tentative` until enough evidence has been collected. Then,
+    the track state is changed to `confirmed`. Tracks that are no longer alive
+    are classified as `deleted` to mark them for removal from the set of active
+    tracks.
+
+    """
+
+    Init = 1
+    Running = 2
+    Finished = 3
+
 class PoolLoader(object):
-    def __init__(self, seg_info, crop_area=None):
-        self.seq_info = seg_info
+    def __init__(self, crop_area=None):
+
+        import socket
+        self.hostname = socket.gethostname()
+
+        self.image = None
+
+        self._color = (0, 0, 0)
+        self.text_color = (255, 255, 255)
+        self.thickness = 1.5
+        self.crop_image = crop_area
+
 
         self._reading_queue = Queue(50)
         self._display_queue = Queue(50)
         self._detection_queue = Queue(50)
         self._tracker_queue = Queue(50)
-        self._load_terminate = False
+        self._terminate = False
         self._loading_index = 0
 
+        self.frame_index = 0
+
+        self.min_frame_idx = 0
+        self.max_frame_idx = 0
+
+        self._loadingState = ThreadState.Init
+        self._displayState = ThreadState.Init
+
+        #   init the thread
+        self._loading_thread = Thread(target=self._load_single_image, args=())
+        self._loading_thread.daemon = True
+        self._loading_thread.start()
+        # this is not thread safe so we only call it onetime
+        self._display_thread = Thread(target=self._display_image, args=())
+        self._display_thread.daemon = True
+        self._display_thread.start()
+
+
+    def load(self, seq_info):
         # load list of image
+        while self._displayState == ThreadState.Running or self._loadingState == ThreadState.Running:
+            time.sleep(0.01)
+
+        self.seq_info = seq_info
         supported_formats = [".png", ".jpg"]
 
-        self.crop_image = crop_area
-
         self.image_filenames = {
-            int(idx): os.path.join(seg_info['imgdir'], f)
-            for idx, f in enumerate(sorted(os.listdir(seg_info['imgdir']))) if os.path.splitext(f)[-1] in supported_formats}
+            int(idx): os.path.join(seq_info['imgdir'], f)
+            for idx, f in enumerate(sorted(os.listdir(seq_info['imgdir']))) if
+            os.path.splitext(f)[-1] in supported_formats}
 
         if len(self.image_filenames) > 0:
             image = cv2.imread(next(iter(self.image_filenames.values())),
                                cv2.IMREAD_GRAYSCALE)
 
-            self.crop_image = crop_area
             if self.crop_image:
-                image_size = (image.shape[0] - self.crop_image[0] - self.crop_image[1], image.shape[1] - self.crop_image[2] - self.crop_image[3])
+                image_size = (image.shape[0] - self.crop_image[0] - self.crop_image[1],
+                              image.shape[1] - self.crop_image[2] - self.crop_image[3])
             else:
                 image_size = image.shape
             aspect_ratio = int(image_size[0]) / int(image_size[1])
@@ -97,40 +143,30 @@ class PoolLoader(object):
             self.min_frame_idx = min(self.image_filenames.keys())
             self.max_frame_idx = max(self.image_filenames.keys())
 
-        else:
-            self.min_frame_idx = 0
-            self.max_frame_idx = 0
-
         #     to display
         self._image_shape = 1024, int(aspect_ratio * 1024)
 
-        import socket
-        self.window_name = "%s Figure %s" % (socket.gethostname(), self.seq_info["sequence_name"])
+        self.window_name = "%s Figure %s" % (self.hostname, self.seq_info["sequence_name"])
 
-        self.image = np.zeros(self._image_shape+ (3,), dtype=np.uint8)
-
-        self._color = (0, 0, 0)
-        self.text_color = (255, 255, 255)
-        self.thickness = 1.5
-
-        #   init the thread
-        self._loading_thread = Thread(target=self._load_single_image, args=())
-        self._loading_thread.daemon = True
-        self._loading_thread.start()
-
-        self._display_thread = Thread(target=self._display_image, args=())
-        self._display_thread.daemon = True
-        self._display_thread.start()
-
+        # set the flag to load and display image
+        self._loading_index = 0
+        self.frame_index = 0
+        self._displayState = ThreadState.Running
+        self._loadingState = ThreadState.Running
 
 
     def _load_single_image(self):
         while True:
-            if self._loading_index > self.max_frame_idx:
-                self._load_terminate = True
+            if self._terminate:
+            #     this mean we should stop the current thread now
                 return
 
-            if self._reading_queue.full():
+            if self._loading_index > self.max_frame_idx:
+                if self._loadingState == ThreadState.Running:
+                    self._loadingState = ThreadState.Finished
+
+            if self._reading_queue.full() or self._loadingState == ThreadState.Init \
+                    or self._loadingState == ThreadState.Finished:
                 time.sleep(0.01)
                 continue
             #  we will load and do any preprocessing here
@@ -155,9 +191,10 @@ class PoolLoader(object):
         while True:
             try:
                 img = self._reading_queue.get_nowait()
+                self._reading_queue.task_done()
                 break
             except Exception:
-                if self._load_terminate:
+                if self._loadingState == ThreadState.Finished: # this mean loading thread has already finish loading the whole sequence
                     raise Exception("Finished")
                 else:
                     time.sleep(0.01)
@@ -167,7 +204,11 @@ class PoolLoader(object):
                 break
             except Exception:
                 time.sleep(0.01)
-        return img
+
+        # if self._is_not_loading:
+
+        self.frame_index += 1
+        return self.frame_index - 1, img
 
     def rectangle(self, x, y, w, h, label=None, pos=0):
         """Draw a rectangle.
@@ -225,11 +266,35 @@ class PoolLoader(object):
         for i, detection in enumerate(detections):
             self.rectangle(*detection.tlwh, label=str(int(detection.label)), pos=1)
 
+    def queue_detection(self, detections):
+        while True:
+            try:
+                self._detection_queue.put_nowait(detections)
+                return
+            except Exception:
+                time.sleep(0.01)
 
     def _display_image(self):
+        '''
+        NOT a thread-safe so it should be call 1 time only even there
+        is multiple sequence
+        :return: None
+        '''
+        is_cv_show = False
+        self._displayState = ThreadState.Init
         while True:
-            if self._load_terminate and self._display_queue.empty():
-                break
+
+            if self._display_queue.empty():
+                if self._terminate:
+                    break
+
+                if self._loadingState == ThreadState.Finished:
+                    if self._displayState == ThreadState.Running:
+                        self.image[:] = 0
+                        cv2.destroyWindow(self.window_name)
+                        self._displayState = ThreadState.Finished
+                    time.sleep(0.1)
+                    continue
 
             t0 = time.time()
             try:
@@ -238,35 +303,66 @@ class PoolLoader(object):
                 time.sleep(0.01)
                 continue
 
+            # while True:
+            #     try:
+            #         detections = self._detection_queue.get_nowait()
+            #         break
+            #     except Exception:
+            #         time.sleep(0.001)
+            #
+            # self.thickness = 2
+            # self.color = 0, 0, 255
+            # for detection in detections:
+            #     self.rectangle(*detection.tlwh, label=str(int(detection.label)), pos=1)
+            # while True:
+            #     try:
+            #         tracklets = self._tracker_queue.get_nowait()
+            #         break
+            #     except Exception:
+            #         time.sleep(0.001)
+            #
             resized_img = cv2.resize(self.image, self._image_shape[:2])
             cv2.imshow(self.window_name, resized_img)
-
+            is_cv_show = True
             t1 = time.time()
             remaining_time = max(1, int(self.seq_info["update_ms"] - 1e3 * (t1 - t0)))
             key = cv2.waitKey(remaining_time)
 
-        self.image[:] = 0
-        cv2.destroyWindow(self.window_name)
+        if is_cv_show:
+            self.image[:] = 0
+            cv2.destroyWindow(self.window_name)
 
     def stop(self):
-        self._load_terminate = True
+        self._terminate = True
         self._loading_thread.join()
         self._display_thread.join()
 
     def __del__(self):
-        self.stop()
+        try:
+            self.stop()
+        except Exception as e:
+            print(e)
+
+
+
 
 
 if __name__ == "__main__":
     seq_info = {}
-    seq_info["imgdir"] = r"/datasets/kitti_tracking/image/0000/"
-    seq_info["update_ms"] = 500
-    seq_info["sequence_name"] = "Test"
-    pool_display = PoolLoader(seq_info, None)
-    while True:
-        try:
-            pool_display.read()
-        except Exception as e:
-            break
+    seq_info["update_ms"] = 60
+    seq_info["show_detections"] = True
+    pool_display = PoolLoader(None)
+
+    dataset = r"/datasets/kitti_tracking/image/"
+    for sequence in os.listdir(dataset):
+        sequence_dir = os.path.join(dataset, sequence)
+        seq_info["imgdir"] = sequence_dir
+        seq_info["sequence_name"] = sequence
+        pool_display.load(seq_info)
+        while True:
+            try:
+                pool_display.read()
+            except Exception as e:
+                break
 
     pool_display.stop()
