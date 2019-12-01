@@ -72,8 +72,10 @@ def run(args):
 
     frozenpb = r"/home/msis_member/.keras/datasets/faster_rcnn_resnet101_kitti_2018_01_28/frozen_inference_graph.pb"
     metaPath = r"/home/msis_member/Project/deep_sort/detector/data/kitti_tensorflow.names"
-    detector = TensorFlowDetector(sess, frozenpb, class_filter=None, altName=metaPath)
-
+    # detector = TensorFlowDetector(sess, frozenpb, class_filter=None, altName=metaPath)
+    detector = Detector(configPath=detection_cfg['cfg_path'], metaPath=detection_cfg['meta_path'],
+                        weightPath=detection_cfg['weight_path'], sharelibPath=detection_cfg['sharelibPath'],
+                        gpu_num = args.gpu)
     encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'],
                          args.extractor_batchsize)
     # if running_cfg == "from_detect" or running_cfg == "from_encoded":
@@ -83,64 +85,68 @@ def run(args):
     seq_info["update_ms"] = 60
     seq_info["show_detections"] = True
     seq_info["show_tracklets"] = True
-    pool_display = PoolLoader(None)
+    pool_display = PoolLoader(20)
 
     specific_sequence = args.sequence
 
-    for sequence in os.listdir(args.sequence_dir):
-        if len(specific_sequence) > 0 and sequence != specific_sequence:
-            continue
-        sequence_dir = os.path.join(args.sequence_dir, sequence)
-        if os.path.isdir(sequence_dir):
+    def run():
+        for sequence in os.listdir(args.sequence_dir):
+            if len(specific_sequence) > 0 and sequence != specific_sequence:
+                continue
+            sequence_dir = os.path.join(args.sequence_dir, sequence)
+            if os.path.isdir(sequence_dir):
 
-            seq_info["imgdir"] = sequence_dir
-            seq_info["sequence_name"] = sequence
-            pool_display.load(seq_info)
-            # if running_cfg == "from_encoded":
-            #     raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % sequence)
-            #     detector = PseudoDetector(detFile=raw_detections_file, metaFile=detection_cfg['metaFile'])
-            # elif running_cfg == "track":
-            #     detector = NoneDetector(metaFile=detection_cfg['metaFile'])
-            #     detection_file = os.path.join(detections_dir, "%s.npy" % sequence)
-            #     encoder = PseudoEncoder(detection_file, True)
+                seq_info["imgdir"] = sequence_dir
+                seq_info["sequence_name"] = sequence
+                pool_display.load(seq_info)
+                metric = nn_matching.NearestNeighborDistanceMetric(
+                    "cosine", args.max_cosine_distance, args.nn_budget)
+                tracker = Tracker(metric, max_iou_distance=0.6)
+                # mctracker.updateSingleTracker(tracker, metric)
 
-            metric = nn_matching.NearestNeighborDistanceMetric(
-                "cosine", args.max_cosine_distance, args.nn_budget)
-            tracker = Tracker(metric, max_iou_distance=0.6)
-            # mctracker.updateSingleTracker(tracker, metric)
+                while True:
+                    try:
+                        frame_idx, frame = pool_display.read()
+                    except Exception as e:
+                        print(e)
+                        break
 
-            while True:
-                try:
-                    frame_idx, frame = pool_display.read()
-                except Exception as e:
-                    print(e)
-                    break
+                    # print("Processing frame %05d" % frame_idx)
 
-                print("Processing frame %05d" % frame_idx)
+                    _t0 = time.time()
+                    raw_detections = detector(frame, frame_idx)
+                    # _t1 = time.time() - _t0
+                    detections = encoder(frame, raw_detections, frame_idx)
+                    # _t2 = time.time() - _t1
 
-                _t0 = time.time()
-                raw_detections = detector(frame, frame_idx)
-                _t1 = time.time() - _t0
-                detections = encoder(frame, raw_detections, frame_idx)
-                pool_display.queue_detection(detections)
+                    detections = [d for d in detections if d.confidence >= args.min_confidence and d.tlwh[3] > args.min_detection_height]
 
-                detections = [d for d in detections if d.confidence >= args.min_confidence and d.tlwh[3] > args.min_detection_height]
+                    # Run non-maxima suppression.
+                    boxes = np.array([d.tlwh for d in detections])
+                    scores = np.array([d.confidence for d in detections])
+                    indices = preprocessing.non_max_suppression(
+                        boxes, args.nms_max_overlap, scores)
+                    detections = [detections[i] for i in indices]
 
-                # Run non-maxima suppression.
-                boxes = np.array([d.tlwh for d in detections])
-                scores = np.array([d.confidence for d in detections])
-                indices = preprocessing.non_max_suppression(
-                    boxes, args.nms_max_overlap, scores)
-                detections = [detections[i] for i in indices]
+                    # Update tracker.
+                    tracker.predict()
+                    tracker.update(detections)
+                    pool_display.last_proctime = time.time() - _t0
 
-                # Update tracker.
-                tracker.predict()
-                tracker.update(detections)
-                # _t2 = time.time() - _t0 - _t1
-                pool_display.queue_tracklets(tracker.tracks)
+                    pool_display.queue_detection(detections)
+                    pool_display.queue_tracklets(tracker.tracks)
 
 
-    pool_display.stop()
+    try:
+        run()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        raise(e)
+    finally:
+        print("Release")
+        pool_display.stop()
+        sess.close()
 
 if __name__ == "__main__":
     args = parse_args()

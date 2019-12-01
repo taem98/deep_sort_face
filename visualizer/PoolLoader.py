@@ -74,7 +74,7 @@ class ThreadState:
     Finished = 3
 
 class PoolLoader(object):
-    def __init__(self, crop_area=None):
+    def __init__(self, poolsize = 50, crop_area=None):
 
         import socket
         self.hostname = socket.gethostname()
@@ -87,10 +87,10 @@ class PoolLoader(object):
         self.crop_image = crop_area
 
 
-        self._reading_queue = Queue(50)
-        self._display_queue = Queue(50)
-        self._detection_queue = Queue(50)
-        self._tracker_queue = Queue(50)
+        self._reading_queue = Queue(poolsize)
+        self._display_queue = Queue(poolsize)
+        self._detection_queue = Queue(poolsize)
+        self._tracker_queue = Queue(poolsize)
         self._terminate = False
         self._loading_index = 0
 
@@ -102,6 +102,7 @@ class PoolLoader(object):
         self._loadingState = ThreadState.Init
         self._displayState = ThreadState.Init
 
+        self.last_proctime = 1
         #   init the thread
         self._loading_thread = Thread(target=self._load_single_image, args=())
         self._loading_thread.daemon = True
@@ -159,6 +160,7 @@ class PoolLoader(object):
         while True:
             if self._terminate:
             #     this mean we should stop the current thread now
+                self._loadingState = ThreadState.Finished
                 return
 
             if self._loading_index > self.max_frame_idx:
@@ -207,6 +209,11 @@ class PoolLoader(object):
         # if self._is_not_loading:
         self._reading_queue.task_done()
         self.frame_index += 1
+        print("\r {}/{} Process FPS {} Load {} Playback {} \t\t".format(self.frame_index - 1, self.max_frame_idx,
+                                                                1 / self.last_proctime,
+                                                                self._reading_queue.qsize(),
+                                                                 self._display_queue.qsize(),
+                                                                 ), end='')
         return self.frame_index - 1, img
 
     def rectangle(self, x, y, w, h, label=None, pos=0):
@@ -278,7 +285,10 @@ class PoolLoader(object):
         for track in tracks:
             if not track.is_confirmed() or track.time_since_update > 0:
                 continue
-            confirmed_tracked.append(track)
+            entry = {}
+            entry["trackID"] = track.track_id
+            entry["bboxs"] = track.to_tlwh()
+            confirmed_tracked.append(entry)
             # self.viewer.color = create_unique_color_uchar(track.track_id)
             # self.viewer.rectangle(
             #     *track.to_tlwh().astype(np.int), label=str(track.track_id))
@@ -303,6 +313,7 @@ class PoolLoader(object):
 
             if self._display_queue.empty():
                 if self._terminate:
+                    self._displayState = ThreadState.Finished
                     break
 
                 if self._loadingState == ThreadState.Finished:
@@ -338,9 +349,13 @@ class PoolLoader(object):
                     tracks = self._tracker_queue.get_nowait()
                     # self.thickness = 2
                     for track in tracks:
-                        self.color = create_unique_color_uchar(track.track_id)
-                        self.rectangle(
-                            *track.to_tlwh().astype(np.int), label=str(track.track_id))
+                        self.color = create_unique_color_uchar(track["trackID"])
+                        # bboxs = track.to_tlwh().astype(np.int)
+                        ret = track["bboxs"]
+                        # ret[2] *= ret[3]
+                        # ret[:2] -= ret[2:] / 2
+                        self.rectangle(*ret, label=str(track["trackID"]))
+                    self._tracker_queue.task_done()
                     break
                 except Exception:
                     time.sleep(0.001)
