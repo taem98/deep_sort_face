@@ -343,6 +343,8 @@ class PoolLoader(object):
                     break
                 except Exception:
                     time.sleep(0.001)
+                    if self._terminate:
+                        break
 
             while self.seq_info["show_tracklets"]:
                 try:
@@ -359,16 +361,18 @@ class PoolLoader(object):
                     break
                 except Exception:
                     time.sleep(0.001)
+                    if self._terminate:
+                        break
 
             resized_img = cv2.resize(self.image, self._image_shape[:2])
             cv2.imshow(self.window_name, resized_img)
-            is_cv_show = True
+            # is_cv_show = True
             t1 = time.time()
             remaining_time = max(1, int(self.seq_info["update_ms"] - 1e3 * (t1 - t0)))
             key = cv2.waitKey(remaining_time)
 
             self._display_queue.task_done()
-
+        print("Exit")
         self.image[:] = 0
         cv2.destroyWindow(self.window_name)
 
