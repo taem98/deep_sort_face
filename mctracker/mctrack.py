@@ -147,7 +147,8 @@ class McTrack:
         """Mark this track as missed (no association at the current time step).
         """
         if self.state == TrackState.Tentative:
-            self.state = TrackState.Deleted
+            if self.ego_time_since_update > 3:
+                self.state = TrackState.Deleted
         elif self.remote_time_since_update > self._max_age:
             self.state = TrackState.Deleted
 

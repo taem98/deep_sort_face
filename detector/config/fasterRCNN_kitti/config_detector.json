@@ -1,0 +1,7 @@
+{
+  "name" : "Faster-RCNN kitti416x416",
+  "type" : "tensorflow_modelzoo",
+  "frozenpb" : "/home/msis_member/.keras/datasets/faster_rcnn_resnet101_kitti_2018_01_28/frozen_inference_graph.pb",
+  "metaFile" : "detector/data/kitti_tensorflow.names",
+  "class_filter" : [1]
+}

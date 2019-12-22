@@ -305,5 +305,8 @@ class Detector(PseudoDetector):
 
         self.free_detections(dets, num)
         self.free_image(darknet_image)
-        self._detections_list.extend(res)
+
+        if self.isSaveRes:
+            self._detections_list.extend(res)
+
         return res

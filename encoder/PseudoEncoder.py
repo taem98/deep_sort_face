@@ -9,6 +9,7 @@ class PseudoEncoder(object):
         self._detections_list = []
         self._altName=altName
         self._detection_id = 0
+        self.isSaveRes = True
         if self._from_file:
             if not os.path.isfile(detFile):
                 raise FileNotFoundError("Can not found detection file")
@@ -59,7 +60,8 @@ class PseudoEncoder(object):
             rows = self._raw_detection[mask]
         else:
             rows = raw_detections
-            self._detections_list.extend(rows)
+            if self.isSaveRes:
+                self._detections_list.extend(rows)
 
         for row in rows:
             if self._altName:
@@ -71,7 +73,7 @@ class PseudoEncoder(object):
         return res
 
     def save(self, output_dir, sequence):
-        if not self._from_file:
+        if not self._from_file and self.isSaveRes:
             # detections = self._detections_list[0:9]
             # np_arr = np.asarray(self._detections_list, dtype=self._dtype)
             np_arr = np.asarray(self._detections_list, dtype=np.float32)

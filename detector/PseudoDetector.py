@@ -31,7 +31,7 @@ class PseudoDetector(NoneDetector):
         #                ("confidence", np.float32), ("classid", np.int), ("ud0", np.int), ("ud1", np.int), ("name", '<U5')]
 
         # self._dtype = [np.int, np.int, np.float32, np.float32,  np.float32, np.float32, np.float32, np.int,np.int, np.int, '<U5']
-
+        self.isSaveRes = True
         if self._from_file:
             if not os.path.isfile(detFile):
                 raise FileNotFoundError("Can not found detection file")
@@ -50,7 +50,7 @@ class PseudoDetector(NoneDetector):
         return rows
 
     def save(self, output_dir, sequence):
-        if not self._from_file:
+        if not self._from_file and self.isSaveRes:
             # detections = self._detections_list[0:9]
             # np_arr = np.asarray(self._detections_list, dtype=self._dtype)
             np_arr = np.asarray(self._detections_list, dtype=np.float32)

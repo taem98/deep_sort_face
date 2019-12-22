@@ -215,20 +215,6 @@ class MultiCameraTracker:
         _detections = []
         # _features = []
 
-        # while True:
-        #     try:
-        #         cmds = self._request_Q.get(block=False)
-        #         if cmds.cmd == embs_pb2.command.TRACKLET_SEND:
-        #             print("Start agrregated {} : {}".format(cmds.cmd, cmds.master_address))
-        #
-        #         if cmds.cmd == embs_pb2.command.STOPPED:
-        #             print("Remote target has close!!!")
-        #             self.running_mode = 0
-        #         break
-        #     except Exception:
-        #         time.sleep(0.1)
-
-
         while not self._payload_Q.empty():
             detection = self._payload_Q.get()
             _detections.append(detection)
@@ -292,6 +278,8 @@ class MultiCameraTracker:
                     if _remote_id in mctrack.remotes_id.keys():
                         self.mctracks[key].update(_remote_id, _detections[detection_idx, 10:])
                         break
+
+        self.mctracks = {k:v for k,v in self.mctracks.items() if not v.is_deleted()}
 
         for mctrack in self.mctracks.values():
             if mctrack.is_confirmed():

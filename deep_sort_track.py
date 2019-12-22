@@ -65,11 +65,16 @@ def run(args):
 
     if running_cfg == "from_detect":
         print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
-        print("Detector config: %s" % detection_cfg['name'])
+        print("Detector type {} config: {}".format(detection_cfg['type'], detection_cfg['name']))
 
-        frozenpb = r"/home/msis_member/.keras/datasets/faster_rcnn_resnet101_kitti_2018_01_28/frozen_inference_graph.pb"
-        metaPath = r"/home/msis_member/Project/deep_sort/detector/data/kitti_tensorflow.names"
-        detector = TensorFlowDetector(sess, frozenpb, class_filter=None, altName=metaPath)
+        if detection_cfg['type'] == "Yolo":
+            detector = Detector(configPath=detection_cfg['cfg_path'], metaPath=detection_cfg['meta_path'],
+                                weightPath=detection_cfg['weight_path'], sharelibPath=detection_cfg['sharelibPath'],
+                                gpu_num=args.gpu)
+        else:
+            detector = TensorFlowDetector(sess, detection_cfg['frozenpb'], class_filter=None,
+                                          altName=detection_cfg['metaFile'])
+
     if running_cfg == "from_detect" or running_cfg == "from_encoded":
         print("Extractor config: %s" % extractor_cfg['name'])
 
@@ -96,7 +101,7 @@ def run(args):
             mctracker.updateSingleTracker(tracker, metric)
             
             def frame_callback(vis, frame, frame_idx):
-                print("Processing frame %05d" % frame_idx)
+                print("\r Processing frame %05d" % frame_idx, end='')
 
                 _t0 = time.time()
                 raw_detections = detector(frame, frame_idx)

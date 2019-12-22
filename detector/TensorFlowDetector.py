@@ -86,7 +86,8 @@ class TensorFlowDetector(PseudoDetector):
         # # detections = [Detection(detect_res[id][0], detect_res[id][1], features[idx], detect_res[id][3]) for idx, id in enumerate(image_patches_id)]
         # res = super().__call__(image, detections, frame_id)
         # ymin, xmin, ymax, xmax = box
-        self._detections_list.extend(res)
+        if self.isSaveRes:
+            self._detections_list.extend(res)
         return res
 
 if __name__ == "__main__":
