@@ -1,0 +1,7 @@
+{
+  "name" : "ssd_mobilenet_v1_fpn_shared_box_predictor_640x640_coco14_sync_2018_07_03",
+  "type" : "tensorflow_modelzoo",
+  "frozenpb" : "tmp/ssd_mobilenet_v1_fpn_shared_box_predictor_640x640_coco14_sync_2018_07_03/frozen_inference_graph.pb",
+  "metaFile" : "detector/data/coco_tfmodelzoo.names",
+  "class_filter" : [3,8,10]
+}

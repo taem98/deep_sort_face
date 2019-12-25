@@ -1,0 +1,7 @@
+{
+  "name" : "ssd_mobilenet_v3_large_coco_2019_08_14",
+  "type" : "tensorflow_modelzoo",
+  "frozenpb" : "tmp/ssd_mobilenet_v3_large_coco_2019_08_14/ssd_mobilenet_v3_large_coco_2019_08_14/frozen_inference_graph.pb",
+  "metaFile" : "detector/data/coco.names",
+  "class_filter" : [1]
+}

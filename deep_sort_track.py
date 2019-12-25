@@ -97,7 +97,7 @@ def run(args):
 
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "cosine", args.max_cosine_distance, args.nn_budget)
-            tracker = Tracker(metric, max_iou_distance=0.6)
+            tracker = Tracker(metric, max_iou_distance=0.6, n_init=2)
             mctracker.updateSingleTracker(tracker, metric)
             
             def frame_callback(vis, frame, frame_idx):
@@ -128,7 +128,9 @@ def run(args):
                 for track in tracker.tracks:
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
-                    bbox = track.to_tlbr()
+                        # track.to_tlbr()
+                    bbox = track.detection_bboxs.astype(np.int)
+                    bbox[2:] += bbox[:2]
                     mctracker.initialize_ego_track(track)
                     mctracker.broadcast(encoder.update_trackid(track.detection_id, track.track_id))
                     class_id = encoder.get_class_id(track.detection_id)
@@ -149,10 +151,11 @@ def run(args):
                 if args.display:
                     vis.set_image(frame.copy())
                     vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
-                    vis.draw_detections(detections)
-                    vis.draw_trackers_with_othertag(tracker.tracks, matching, False, mctracker.running_mode)
+                    # vis.draw_detections(detections)
+                    vis.draw_trackers_with_othertag(tracker.tracks, matching, False, mctracker.running_mode, args.debug_level)
                     vis.viewer.show_image()
                 # notify other tracker or wait here
+
                 mctracker.finished()
 
             # Run tracker.

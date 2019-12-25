@@ -52,7 +52,7 @@ def parse_args():
         "disregarded", default=25, type=int)
     parser.add_argument(
         "--nms_max_overlap",  help="Non-maxima suppression threshold: Maximum "
-        "detection overlap.", default=1.0, type=float)
+        "detection overlap.", default=0.8, type=float)
     parser.add_argument(
         "--max_cosine_distance", help="Gating threshold for cosine distance "
         "metric (object appearance).", type=float, default=0.1)
@@ -77,6 +77,11 @@ def parse_args():
     parser.add_argument(
         "--extractor_batchsize", help="Batch size for extractor, change to fit to ram os system",
         default=32, type=int
+    )
+
+    parser.add_argument(
+        "--debug_level", help="Debug level for the tracker",
+        default=0, type=int
     )
 
     return parser

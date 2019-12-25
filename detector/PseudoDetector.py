@@ -37,14 +37,18 @@ class PseudoDetector(NoneDetector):
                 raise FileNotFoundError("Can not found detection file")
             self._raw_detection = np.load(detFile)
             # print(self._raw_detection[0,"frame_id"])
-            self._frame_indices = self._raw_detection[:, 0].astype(np.int)
-
+            try:
+                self._frame_indices = self._raw_detection[:, 0].astype(np.int)
+            except Exception:
+                self._frame_indices = None
         # min_frame_idx = frame_indices.astype(np.int).min()
         # max_frame_idx = frame_indices.astype(np.int).max()
 
     def __call__(self, img, frame_idx):
         rows = None
         if self._from_file:
+            if self._frame_indices is None:
+                return []
             mask = self._frame_indices == frame_idx
             rows = self._raw_detection[mask]
         return rows

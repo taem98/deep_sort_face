@@ -44,9 +44,11 @@ def extract_image_patch(image, bbox, patch_shape):
     if patch_shape is not None:
         # correct aspect ratio to patch shape
         target_aspect = float(patch_shape[1]) / patch_shape[0]
-        new_width = target_aspect * bbox[3]
-        bbox[0] -= (new_width - bbox[2]) / 2
-        bbox[2] = new_width
+        new_height = target_aspect * bbox[2] * 1.2
+        bbox[0] -= (new_height - bbox[2]) / 2
+        bbox[1] -= (new_height - bbox[3]) / 2
+        bbox[2] = new_height
+        bbox[3] = new_height
 
     # convert to top left, bottom right
     bbox[2:] += bbox[:2]
