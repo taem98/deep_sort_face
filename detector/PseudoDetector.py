@@ -3,6 +3,14 @@ import os
 import csv
 
 class NoneDetector(object):
+    FRAME_ID = 0
+    TRACK_ID = 1
+    TOP = 2
+    LEFT = 3
+    WIDTH = 4
+    HEIGHT = 5
+    SCORE = 6
+    CLASS_ID = 7
     def __init__(self, metaFile):
         self.altNames = None
         try:

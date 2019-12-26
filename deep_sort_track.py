@@ -107,16 +107,33 @@ def run(args):
                 raw_detections = detector(frame, frame_idx)
                 _t1 = time.time() - _t0
 
+                # preprocess the result first to reduce the embedding computation
+                # Run non-maxima suppression.
+                detections = []
+                boxes = []
+                scores  = []
+                for idx, raw_detection in enumerate(raw_detections):
+                    if raw_detection[detector.SCORE] >= args.min_confidence and raw_detection[detector.HEIGHT] > args.min_detection_height:
+                        boxes.append([raw_detection[detector.TOP], raw_detection[detector.LEFT], raw_detection[detector.WIDTH], raw_detection[detector.HEIGHT]])
+                        scores.append(raw_detection[detector.SCORE])
+                        detections.append(raw_detection)
+
+                boxes = np.asarray(boxes)
+                indices = preprocessing.non_max_suppression(
+                    boxes, args.nms_max_overlap, scores)
+
+                raw_detections = [detections[i] for i in indices]
+
                 detections = encoder(frame, raw_detections, frame_idx)
 
-                detections = [d for d in detections if d.confidence >= args.min_confidence and d.tlwh[3] > args.min_detection_height]
+                # detections = [d for d in detections if d.confidence >= args.min_confidence and d.tlwh[3] > args.min_detection_height]
 
                 # Run non-maxima suppression.
-                boxes = np.array([d.tlwh for d in detections])
-                scores = np.array([d.confidence for d in detections])
-                indices = preprocessing.non_max_suppression(
-                                        boxes, args.nms_max_overlap, scores)
-                detections = [detections[i] for i in indices]
+                # boxes = np.array([d.tlwh for d in detections])
+                # scores = np.array([d.confidence for d in detections])
+                # indices = preprocessing.non_max_suppression(
+                #                         boxes, args.nms_max_overlap, scores)
+                # detections = [detections[i] for i in indices]
 
                 # Update tracker.
                 tracker.predict()

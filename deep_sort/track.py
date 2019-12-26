@@ -82,6 +82,8 @@ class Track:
         self.detection_id = detection_id
         self._n_init = n_init
         self._max_age = max_age
+        self.affinity_score = 0.0
+        self.iou_score = 0.0
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,

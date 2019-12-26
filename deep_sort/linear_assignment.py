@@ -76,6 +76,7 @@ def min_cost_matching(
             unmatched_detections.append(detection_idx)
         else:
             matches.append((track_idx, detection_idx))
+            tracks[track_idx].affinity_score = cost_matrix[row, col]
     return matches, unmatched_tracks, unmatched_detections
 
 

@@ -142,7 +142,10 @@ class Visualization(object):
             for track in tracks:
                 label_str = "{}".format(track.track_id)
                 if not track.is_confirmed() or track.time_since_update > 0:
-                    label_str += "U:{}".format(track.time_since_update)
+                    label_str += "_U:{}".format(track.time_since_update)
+
+                label_str += "_{0:.2f}".format(track.affinity_score)
+                track.affinity_score = 0.0
 
                 target_id = None
                 for idx, t in enumerate(matching):
