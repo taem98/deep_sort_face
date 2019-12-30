@@ -53,8 +53,9 @@ def min_cost_matching(
     if len(detection_indices) == 0 or len(track_indices) == 0:
         return [], track_indices, detection_indices  # Nothing to match.
 
-    cost_matrix = distance_metric(
+    cost_matrix_2, cost_matrix = distance_metric(
         tracks, detections, track_indices, detection_indices)
+
     cost_matrix[cost_matrix > max_distance] = max_distance + 1e-5
 
     indices_3 = linear_sum_assignment(cost_matrix)
@@ -74,6 +75,7 @@ def min_cost_matching(
         if cost_matrix[row, col] > max_distance:
             unmatched_tracks.append(track_idx)
             unmatched_detections.append(detection_idx)
+            tracks[track_idx].iou_score = cost_matrix_2[row, col]
         else:
             matches.append((track_idx, detection_idx))
             tracks[track_idx].affinity_score = cost_matrix[row, col]

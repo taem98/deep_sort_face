@@ -145,6 +145,7 @@ class Visualization(object):
                     label_str += "_U:{}".format(track.time_since_update)
 
                 label_str += "_{0:.2f}".format(track.affinity_score)
+                label_str += "_{0:.2f}".format(track.iou_score)
                 track.affinity_score = 0.0
 
                 target_id = None
@@ -172,7 +173,9 @@ class Visualization(object):
                     continue
                 label_str = "{}".format(track.track_id)
                 label_str += "_{0:.2f}".format(track.affinity_score)
+                label_str += "_{0:.2f}".format(track.iou_score)
                 track.affinity_score = 0.0
+                track.iou_score = 0.0
                 target_id = None
                 for idx, t in enumerate(matching):
                     if t[0] == track.track_id:
