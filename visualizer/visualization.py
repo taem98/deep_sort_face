@@ -138,7 +138,7 @@ class Visualization(object):
 #
     def draw_trackers_with_othertag(self, tracks, matching, detection_bbox = False, target_color=0, debug=0):
         self.viewer.thickness = 2
-        if debug:
+        if debug == 2:
             for track in tracks:
                 label_str = "{}".format(track.track_id)
                 if not track.is_confirmed() or track.time_since_update > 0:
@@ -165,6 +165,34 @@ class Visualization(object):
                 else:
                     self.viewer.rectangle(
                         *track.detection_bboxs.astype(np.int), label=label_str)
+
+        elif debug == 1:
+            for track in tracks:
+                if not track.is_confirmed() or track.time_since_update > 0:
+                    continue
+                label_str = "{}".format(track.track_id)
+                label_str += "_{0:.2f}".format(track.affinity_score)
+                track.affinity_score = 0.0
+                target_id = None
+                for idx, t in enumerate(matching):
+                    if t[0] == track.track_id:
+                        label_str += ":{}".format(t[1])
+                        target_id = t[1]
+                        break
+                if target_color > 1 and target_id:
+                    self.viewer.color = create_unique_color_uchar(target_id)
+                else:
+                    self.viewer.color = create_unique_color_uchar(track.track_id)
+                # self.viewer.rectangle(
+                #     *track.to_tlwh().astype(np.int), label=label_str)
+                if not detection_bbox:
+                    self.viewer.rectangle(
+                        *track.to_tlwh().astype(np.int), label=label_str)
+                else:
+                    self.viewer.rectangle(
+                        *track.detection_bboxs.astype(np.int), label=label_str)
+
+
         else:
             for track in tracks:
                 if not track.is_confirmed() or track.time_since_update > 0:

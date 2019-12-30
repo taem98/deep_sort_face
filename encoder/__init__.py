@@ -16,6 +16,10 @@ def run_in_batches(f, data_dict, out, batch_size):
         out[e:] = f(batch_data_dict)
 
 
+def extract_image_with_crop(image, bbox, patch_shape):
+    image_size = image.shape[:2]
+    # if patch_shape
+
 def extract_image_patch(image, bbox, patch_shape):
     """Extract image patch from bounding box.
 
@@ -44,7 +48,7 @@ def extract_image_patch(image, bbox, patch_shape):
     if patch_shape is not None:
         # correct aspect ratio to patch shape
         target_aspect = float(patch_shape[1]) / patch_shape[0]
-        new_height = target_aspect * bbox[2] * 1.2
+        new_height = target_aspect * bbox[2] * 1.4
         bbox[0] -= (new_height - bbox[2]) / 2
         bbox[1] -= (new_height - bbox[3]) / 2
         bbox[2] = new_height

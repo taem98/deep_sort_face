@@ -57,6 +57,7 @@ def run(args):
         print(e)
         print("MUST CONFIGURE THE CORRECT config_detector and config_extractor file")
         return
+
     config = tf.ConfigProto()
     # config.gpu_options.per_process_gpu_memory_fraction = 0.1
     config.gpu_options.visible_device_list = str(args.gpu)
@@ -109,20 +110,21 @@ def run(args):
 
                 # preprocess the result first to reduce the embedding computation
                 # Run non-maxima suppression.
-                detections = []
-                boxes = []
-                scores  = []
-                for idx, raw_detection in enumerate(raw_detections):
-                    if raw_detection[detector.SCORE] >= args.min_confidence and raw_detection[detector.HEIGHT] > args.min_detection_height:
-                        boxes.append([raw_detection[detector.TOP], raw_detection[detector.LEFT], raw_detection[detector.WIDTH], raw_detection[detector.HEIGHT]])
-                        scores.append(raw_detection[detector.SCORE])
-                        detections.append(raw_detection)
+                if running_cfg != "track":
+                    detections = []
+                    boxes = []
+                    scores  = []
+                    for idx, raw_detection in enumerate(raw_detections):
+                        if raw_detection[detector.SCORE] >= args.min_confidence and raw_detection[detector.HEIGHT] > args.min_detection_height:
+                            boxes.append([raw_detection[detector.TOP], raw_detection[detector.LEFT], raw_detection[detector.WIDTH], raw_detection[detector.HEIGHT]])
+                            scores.append(raw_detection[detector.SCORE])
+                            detections.append(raw_detection)
 
-                boxes = np.asarray(boxes)
-                indices = preprocessing.non_max_suppression(
-                    boxes, args.nms_max_overlap, scores)
+                    boxes = np.asarray(boxes)
+                    indices = preprocessing.non_max_suppression(
+                        boxes, args.nms_max_overlap, scores)
 
-                raw_detections = [detections[i] for i in indices]
+                    raw_detections = [detections[i] for i in indices]
 
                 detections = encoder(frame, raw_detections, frame_idx)
 
