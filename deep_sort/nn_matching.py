@@ -153,6 +153,13 @@ class NearestNeighborDistanceMetric(object):
                 self.samples[target] = self.samples[target][-self.budget:]
         self.samples = {k: self.samples[k] for k in active_targets}
 
+    def distance_from_predict(self, features, targets):
+        cost_matrix = np.zeros((len(targets)))
+        for i, target in enumerate(targets):
+            feature = np.reshape(features[i], (1, features[i].shape[0]))
+            cost_matrix[i] = self._metric(self.samples[target], feature)
+        return cost_matrix
+
     def distance(self, features, targets):
         """Compute distance between features and targets.
 

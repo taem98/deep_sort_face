@@ -1,5 +1,5 @@
 {
-  "name" : "Gaussian YOLOv3 bdd100k 416x416",
+  "name" : "Gaussian YOLOv3 bdd100k 512x512",
   "type" : "Yolo",
   "cfg_path" : "./detector/cfg/Gaussian_yolov3_BDD.cfg" ,
   "meta_path" : "./detector/cfg/BDD.data" ,

@@ -32,7 +32,9 @@ class EmbServer(embs_pb2_grpc.EmbServerServicer):
                 return embs_pb2.respond(respondid=2)
             for idx, emb in enumerate(request.embs):
                 weight = [d for d in emb.weight]
-                emb = np.asarray([emb.frame_time, emb.id, 0,0,0,0, emb.confidence, emb.labelid, -1, -1, ])
+                emb = np.asarray([emb.frame_time, emb.id,
+                                  emb.det_bbox.top,emb.det_bbox.left,emb.det_bbox.width,emb.det_bbox.height,
+                                  emb.confidence, emb.labelid, -1, -1, ])
                 detection = np.r_[emb, np.asarray(weight)]
                 self.result_queue.put(detection)
                 # self.result_queue.task_done()
@@ -64,7 +66,8 @@ class MultiCameraTracker:
         if self.running_mode == 0:
             print("MCT Tracker off")
             return
-
+        # this happen when the remote camera finish there sequence
+        self.is_mc_stop = False
         self.mctracks = {}
 
         self.orphane_tracklets = []
@@ -165,7 +168,7 @@ class MultiCameraTracker:
             except Exception:
                 pass
         elif self.running_mode == 2: # this node is the slave to other node so wait here until cmd from master arrive
-            while True:
+            while not self.is_mc_stop:
                 try:
                     cmds = self._request_Q.get(block=False)
                     if cmds.cmd == embs_pb2.command.CONTINUE:
@@ -176,17 +179,35 @@ class MultiCameraTracker:
 
         # otherwise just ignore
 
-    def initialize_ego_track(self, track):
+    def initialize_ego_track(self, track, frame_shape, frame_idx):
         if self.running_mode == 0:
             return
         mctrack = self.mctracks.setdefault(track.track_id, McTrack(track.track_id, 3, 60))
+        bbox = track.detection_bboxs.copy()
+        # for idx in range(4):
+        # bbox[0] = bbox[0] / frame_shape[1]
+        # bbox[2] = bbox[2] / frame_shape[1]
+        # bbox[1] = bbox[1] / frame_shape[0]
+        # bbox[3] = bbox[3] / frame_shape[0]
+        mctrack.ego_bboxs_sample.setdefault(frame_idx, bbox)
         mctrack.ego_hit += 1
         mctrack.ego_time_since_update = 0
         mctrack.is_ego_updated = True
+        if mctrack.ego_hit > mctrack._last_broadcast + 4:
+            tracklets = []
+            for idx, k in enumerate(mctrack.ego_bboxs_sample.keys()):
+                if idx > 4:
+                    break
+                tracklets.append([k, mctrack.ego_track_id, bbox, self.metric.samples[mctrack.ego_track_id][-idx-1]])
+            mctrack._last_broadcast = mctrack.ego_hit
 
     def filter_missing_track(self):
         if self.running_mode == 0:
             return
+        # master or slave node
+        elif self.running_mode == 1 or self.running_mode == 2:
+            self.sendAllPayload()
+
         for key, mctrack in self.mctracks.items():
             mctrack.age += 1
             mctrack.remote_time_since_update += 1
@@ -195,6 +216,18 @@ class MultiCameraTracker:
                 mctrack.is_ego_updated = False
             else:
                 mctrack.ego_time_since_update += 1
+            not_outdated_list = []
+            for k in mctrack.remote_time_since_updates.keys():
+                mctrack.remote_time_since_updates[k] += 1
+                if mctrack.remote_time_since_updates[k] > self._single_tracker.max_age + 10:
+                    not_outdated_list.append(k)
+            for k in not_outdated_list:
+                mctrack.remote_time_since_updates.pop(k)
+                mctrack.remotes_id.pop(k)
+                mctrack.features.pop(k)
+
+            if mctrack.ego_time_since_update > self._single_tracker.max_age:
+                mctrack.mark_deleted()
 
     def updated_ego_track(self, track):
         for idx, mctrack in enumerate(self.mctracks):
@@ -204,8 +237,27 @@ class MultiCameraTracker:
         # self.mctracks.append(McTrack(track.track_id, 2, 60))
         # return len(self.mctracks)
 
+    def frame_sync(self):
+        if self.running_mode == 3:
+            return True
+        while not self.is_mc_stop:
+            try:
+                cmds = self._request_Q.get(block=False)
+                if cmds.cmd == embs_pb2.command.TRACKLET_SEND:
+                    # print("Frame continue".format(cmds.cmd, cmds.master_address))
+                    return True
+                elif cmds.cmd == embs_pb2.command.STOPPED:
+                    self.is_mc_stop = True
+                    return False
+            except Exception:
+                time.sleep(0.1)
+        return False
+
     def agrregate(self, frame_id):
         if self.running_mode == 0:
+            return []
+
+        if not self.frame_sync():
             return []
 
         if self._single_tracker is None or self.metric is None:
@@ -224,13 +276,13 @@ class MultiCameraTracker:
 
         _detections = np.asarray(_detections)
         # _features = np.asarray(_features)
-
+        # 15785481580
 
         def distance_metric(tracks, dets, track_indices, detection_indices):
-            features = np.array([dets[i, :] for i in detection_indices])
+            features = np.array([dets[i,10:] for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(features, targets)
-            return cost_matrix
+            return cost_matrix, cost_matrix
         # we get the 2 previous frame from other camera
 
         if len(_detections) == 0:
@@ -240,47 +292,51 @@ class MultiCameraTracker:
             i for i, t in enumerate(self._single_tracker.tracks) if t.is_confirmed()]
 
         # we should group the the detections by frame time
+        matches = []
+        unmatched_detections = []
         frame_ids = np.unique(_detections[:, 0]).astype(np.int)
+        detection_indices = np.arange(0, len(_detections))
         for frame_id in frame_ids:
             mask = _detections[:, 0].astype(np.int) == frame_id
-            split_detection = _detections[mask]
-            detection_indices = list(range(len(split_detection)))
+            split_indies = detection_indices[mask]
             # active_targets.append(self._single_tracker.tracks[track_idx].track_id)
             # Associate confirmed tracks using appearance features.
             matches_a, unmatched_tracks_a, unmatched_detections = \
-                linear_assignment.min_cost_matching(distance_metric, 0.3, self._single_tracker.tracks,
-                                                    split_detection[:,10:], confirmed_tracks, detection_indices)
-            # match_indies = [(self._single_tracker.tracks[track_idx].track_id,
-            #                  _detections[detection_idx, 1].astype(np.int))
-            #                 for track_idx, detection_idx in matches_a]
-            match_indies = []
-            # features, targets, active_targets = [], [], []
+                linear_assignment.matching_cascade(distance_metric, self.metric.matching_threshold, 30, self._single_tracker.tracks,
+                                                    _detections, confirmed_tracks, split_indies.tolist(), 0)
+            matches.extend(matches_a)
 
-            for track_idx, detection_idx in matches_a:
-                # queue the new id
-                ego_id = self._single_tracker.tracks[track_idx].track_id
-                self.mctracks[ego_id].update(split_detection[detection_idx,1].astype(np.int), split_detection[detection_idx, 10:])
-            '''
-            the unmatched single tracks and no ego mc tracked can be associate in these situation:
-                * the single tracks is recently appear and mc tracked has send in the past
-                so we do the comparing function one again
-                * 
-            '''
-            for track_idx in unmatched_tracks_a:
-                # _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
-                ego_id = self._single_tracker.tracks[track_idx].track_id
-                self.mctracks[ego_id].mark_missed()
-            # for any un-associate pair of object, we create the new trackobject without the ego trackid
-            for detection_idx in unmatched_detections:
-                # may be this node has already here in the remote queue of mctrack, just queue it on
-                for key, mctrack in self.mctracks.items():
-                    _remote_id = _detections[detection_idx, 1].astype(int)
-                    if _remote_id in mctrack.remotes_id.keys():
-                        self.mctracks[key].update(_remote_id, _detections[detection_idx, 10:])
-                        break
+        unmatched_tracks = list(set(confirmed_tracks) - set(k for k, _ in matches))
+        match_indies = []
+        # features, targets, active_targets = [], [], []
+
+        for track_idx, detection_idx in matches:
+            # queue the new id
+            ego_id = self._single_tracker.tracks[track_idx].track_id
+            self.mctracks[ego_id].update(_detections[detection_idx,1].astype(np.int), _detections[detection_idx, 10:])
+        '''
+        the unmatched single tracks and no ego mc tracked can be associate in these situation:
+            * the single tracks is recently appear and mc tracked has send in the past
+            so we do the comparing function one again
+            * 
+        '''
+        for track_idx in unmatched_tracks:
+            # _index = self.updated_ego_track(self._single_tracker.tracks[track_idx])
+            ego_id = self._single_tracker.tracks[track_idx].track_id
+            self.mctracks[ego_id].mark_missed()
+        # for any un-associate pair of object, we create the new trackobject without the ego trackid
+        for detection_idx in unmatched_detections:
+            # may be this node has already here in the remote queue of mctrack, just queue it on
+            for key, mctrack in self.mctracks.items():
+                _remote_id = _detections[detection_idx, 1].astype(int)
+                if _remote_id in mctrack.remotes_id.keys():
+                    self.mctracks[key].update(_remote_id, _detections[detection_idx, 10:])
+                    break
 
         self.mctracks = {k:v for k,v in self.mctracks.items() if not v.is_deleted()}
 
+        ego_list = []
+        hits_list = []
         for mctrack in self.mctracks.values():
             if mctrack.is_confirmed():
                 max_id = 0
@@ -288,8 +344,16 @@ class MultiCameraTracker:
                 # print(type(mctrack.remotes_id))
                 for idx, hits in mctrack.remotes_id.items():
                     if max_hits < hits:
+                        if idx in hits_list:
+                            continue
                         max_id = idx
                         max_hits = hits
+                        # print(max_id)
+                if mctrack.ego_track_id in ego_list:
+                    print(mctrack.ego_track_id)
+
+                ego_list.append(mctrack.ego_track_id)
+                hits_list.append(max_id)
                 match_indies.append((mctrack.ego_track_id, max_id))
                 for feature in mctrack.features[max_id]:
                     self.metric.samples.setdefault(mctrack.ego_track_id, []).append(feature)
@@ -390,6 +454,10 @@ class MultiCameraTracker:
                 # detection = self.detections[track.detection_id]
                 emb.frame_time = int(detection[0])
                 emb.id = int(detection[1])
+                emb.det_bbox.top = int(detection[2])
+                emb.det_bbox.left = int(detection[3])
+                emb.det_bbox.width = int(detection[4])
+                emb.det_bbox.height = int(detection[5])
                 emb.confidence = detection[6]
                 emb.labelid = int(detection[7])
                 for element in detection[10:]:
@@ -397,13 +465,15 @@ class MultiCameraTracker:
                 total_object += 1
                 payload.embs_num = total_object
                 respond = self.client_stub.sendPayload(payload)
+                if respond.respondid == 1:
+                    self.client_Q.task_done()
                 # print(respond.respondid)
                 # print("time {}".format(time.time() - _t0))
-                self.client_Q.task_done()
             except Empty:
                 time.sleep(0.01)
             except Exception as e:
                 print("Send error {}".format(e))
+
 
     def __del__(self):
         try:
@@ -426,9 +496,11 @@ class MultiCameraTracker:
     def broadcast(self, detection):
         if self.running_mode == 0:
             return
-        if self.client_stub is not None:
+        if self.client_stub and not self.is_mc_stop:
             self.client_Q.put(detection)
-
+            # while self.client_Q.join() and self.running_mode == 1 or self.running_mode == 2:
+            while self.client_Q.join():
+                time.sleep(0.001)
 
 
 

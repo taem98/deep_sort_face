@@ -29,10 +29,18 @@ class Evaluator(object):
         self._results = []
         if self.fmt == "kitti":
             self.tag = kitti_tag()
+        self.frameid = -1
+        self.altName = None
 
     def append(self, frameid, trackid, bbox, label=1):
         # to_tlbr self.left, self.top, self.right, self.bot,
         self._results.append([frameid, trackid, label, bbox[1], bbox[0], bbox[3], bbox[2]])
+
+    def append2(self, trackid, bbox, labelid):
+        if self.frameid < 0 or not self.altName:
+            raise Exception("please set frame id and altName")
+        label = self.altName[labelid]
+        self.append(self.frameid, trackid, bbox, label)
 
     def save(self, output_dir, sequence):
         if len(self._results) == 0:

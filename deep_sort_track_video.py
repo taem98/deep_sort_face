@@ -48,13 +48,12 @@ def run(args):
         json.dump(vars(args), f, ensure_ascii=False, indent=2, sort_keys=True)
 
     mctracker = MultiCameraTracker(args.mc_mode, args.bind_port, args.server_addr)
-    if args.mc_mode == 1 or args.mc_mode == 2:
-        evaluator2 = Evaluator()
     evaluator = Evaluator()
 
     try:
         detection_cfg = load_json_config(os.path.join(result_folder, "config_detector.json"))
         extractor_cfg = load_json_config(os.path.join(result_folder, "config_extractor.json"))
+        vis_cfg = load_json_config(os.path.join(result_folder, 'config_visualizer.json'))
     except Exception as e:
         print(e)
         print("MUST CONFIGURE THE CORRECT config_detector and config_extractor file")
@@ -85,22 +84,19 @@ def run(args):
 
     specific_sequence = args.sequence
 
-    for sequence in os.listdir(args.sequence_dir):
-        if len(specific_sequence) > 0 and sequence != specific_sequence:
+    for file_path in os.listdir(args.sequence_dir):
+        file_name = os.path.splitext(file_path)[0]
+        if len(specific_sequence) > 0 and file_name != specific_sequence:
             continue
-        sequence_dir = os.path.join(args.sequence_dir, sequence)
-        if os.path.isdir(sequence_dir):
+        file_path = os.path.join(args.sequence_dir, file_path)
+        if os.path.isfile(file_path):
             if running_cfg == "from_encoded":
-                raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % sequence)
+                raw_detections_file = os.path.join(raw_detections_dir, "%s.npy" % file_name)
                 detector = PseudoDetector(detFile=raw_detections_file, metaFile=detection_cfg['metaFile'])
             elif running_cfg == "track":
                 detector = NoneDetector(metaFile=detection_cfg['metaFile'])
-                detection_file = os.path.join(detections_dir, "%s.npy" % sequence)
+                detection_file = os.path.join(detections_dir, "%s.npy" % file_name)
                 encoder = PseudoEncoder(detection_file, True)
-
-            evaluator.altName = detector.altNames
-            if args.mc_mode == 1 or args.mc_mode == 2:
-                evaluator2.altName = detector.altNames
 
             metric = nn_matching.NearestNeighborDistanceMetric(
                 "cosine", args.max_cosine_distance, args.nn_budget)
@@ -145,19 +141,18 @@ def run(args):
                     if not track.is_predicted() and not track.is_confirmed() or track.time_since_update > 0:
                         continue
                         # track.to_tlbr()
-
-                    bbox = track.det_meta[-1][1].astype(np.int)
+                    bbox = track.detection_bboxs.astype(np.int)
                     bbox[2:] += bbox[:2]
-                    class_id = int(track.det_meta[-1][2])
-                    mctracker.initialize_ego_track(track, frame.shape, frame_idx)
+                    mctracker.initialize_ego_track(track)
+                    mctracker.broadcast(encoder.update_trackid(track.detection_id, track.track_id))
+                    class_id = encoder.get_class_id(track.detection_id)
                     class_name = detector.altNames[class_id]
                     evaluator.append(frame_idx, track.track_id, bbox, class_name)
+                    # mctracker.client_Q.put()
                     # left top right bottom
-
+                # mctracker.broadcastEmb()
                 mctracker.filter_missing_track()
                 # mctracker.sendAllPayload()
-
-
 
                 try:
                     matching = mctracker.agrregate(frame_idx)
@@ -168,15 +163,8 @@ def run(args):
                 if args.display:
                     vis.set_image(frame.copy())
                     vis.viewer.annotate(4, 20, "dfps {:03.1f} tfps {:03.1f}".format(1 / _t1, 1 / _t2))
-                    if args.show_detections:
-                        vis.draw_detections(detections)
-                    if args.mc_mode == 1 or args.mc_mode == 2:
-                        evaluator2.frameid = frame_idx
-                        vis.draw_trackers_with_othertag(tracker.tracks, matching, args.show_trackdet_bbox,
-                                                        mctracker.running_mode, args.debug_level, evaluator2)
-                    else:
-                        vis.draw_trackers_with_othertag(tracker.tracks, matching, args.show_trackdet_bbox,
-                                                        mctracker.running_mode, args.debug_level, None)
+                    # vis.draw_detections(detections)
+                    vis.draw_trackers_with_othertag(tracker.tracks, matching, True, mctracker.running_mode, args.debug_level)
                     vis.viewer.show_image()
                 # notify other tracker or wait here
 
@@ -184,11 +172,12 @@ def run(args):
 
             # Run tracker.
             if args.display:
-                visualizer = ImageLoader(sequence_dir, 30, running_name, args.start_frame, args.crop_area)
+                vis_cfg['videopath'] = file_path
+                visualizer = VideoLoader(vis_cfg)
                 if args.save_video:
-                    visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % sequence), fps=30)
+                    visualizer.viewer.enable_videowriter(os.path.join(video_dir, "%s.avi" % file_name), fps=5)
             else:
-                visualizer = NdImageLoader(sequence_dir)
+                visualizer = NdImageLoader(file_path)
 
             try:
                 visualizer.run(frame_callback)
@@ -198,11 +187,9 @@ def run(args):
                 print(e)
 
             finally:
-                detector.save(raw_detections_dir, sequence)
-                encoder.save(detections_dir, sequence)
-                evaluator.save(result_folder, sequence)
-                if args.mc_mode == 1 or args.mc_mode == 2:
-                    evaluator2.save(os.path.join(result_folder, 'data_mc'), sequence)
+                detector.save(raw_detections_dir, file_name)
+                encoder.save(detections_dir, file_name)
+                evaluator.save(result_folder, file_name)
                 # server.stop(1)
                 # raw_detections_np = np.asarray(raw_detections)
                 # np.savetxt(os.join.path(raw_detections_dir, "") raw_detections_np, )

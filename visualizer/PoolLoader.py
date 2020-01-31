@@ -103,6 +103,12 @@ class PoolLoader(object):
         self._displayState = ThreadState.Init
 
         self.last_proctime = 1
+
+        self._textsize = 1
+
+        self.vcap = None
+        self.image_filenames = None
+
         #   init the thread
         self._loading_thread = Thread(target=self._load_single_image, args=())
         self._loading_thread.daemon = True
@@ -117,37 +123,56 @@ class PoolLoader(object):
         # load list of image
         while self._displayState == ThreadState.Running or self._loadingState == ThreadState.Running:
             time.sleep(0.01)
-
+        self.vcap = None
+        self.image_filenames = None
         self.seq_info = seq_info
-        supported_formats = [".png", ".jpg"]
 
-        self.image_filenames = {
-            int(idx): os.path.join(seq_info['imgdir'], f)
-            for idx, f in enumerate(sorted(os.listdir(seq_info['imgdir']))) if
-            os.path.splitext(f)[-1] in supported_formats}
-
-        if len(self.image_filenames) > 0:
-            image = cv2.imread(next(iter(self.image_filenames.values())),
-                               cv2.IMREAD_GRAYSCALE)
-
-            if self.crop_image:
-                image_size = (image.shape[0] - self.crop_image[0] - self.crop_image[1],
-                              image.shape[1] - self.crop_image[2] - self.crop_image[3])
+        if self.seq_info["input_type"] == "video":
+            if not os.path.isfile(self.seq_info["video_path"]):
+                raise FileNotFoundError("Video file not found")
+            # video_name = pathlib.PurePath(videopath)
+            self.vcap = cv2.VideoCapture(self.seq_info["video_path"])
+            if self.vcap.isOpened():
+                width = int(self.vcap.get(3))  # float
+                height = int(self.vcap.get(4))  # float
+                aspect_ratio = height / width
+                image_size = (width, height)
             else:
-                image_size = image.shape
-            aspect_ratio = int(image_size[0]) / int(image_size[1])
-            print("IMAGE SIZE: {} RATIO: {}".format(image_size, aspect_ratio))
+                raise Exception("Could not open video")
+
+            self.window_name = "%s Video %s" % (self.hostname, self.seq_info["video_path"])
         else:
-            image_size = None
+            supported_formats = [".png", ".jpg"]
+            self.image_filenames = {
+                int(idx): os.path.join(seq_info['imgdir'], f)
+                for idx, f in enumerate(sorted(os.listdir(seq_info['imgdir']))) if
+                os.path.splitext(f)[-1] in supported_formats}
 
-        if len(self.image_filenames) > 0:
-            self.min_frame_idx = min(self.image_filenames.keys())
-            self.max_frame_idx = max(self.image_filenames.keys())
+            if len(self.image_filenames) > 0:
+                image = cv2.imread(next(iter(self.image_filenames.values())),
+                                   cv2.IMREAD_GRAYSCALE)
 
+                if self.crop_image:
+                    image_size = (image.shape[0] - self.crop_image[0] - self.crop_image[1],
+                                  image.shape[1] - self.crop_image[2] - self.crop_image[3])
+                else:
+                    image_size = image.shape
+                aspect_ratio = int(image_size[0]) / int(image_size[1])
+
+            else:
+                image_size = None
+
+            if len(self.image_filenames) > 0:
+                self.min_frame_idx = min(self.image_filenames.keys())
+                self.max_frame_idx = max(self.image_filenames.keys())
+
+            self.window_name = "%s Figure %s" % (self.hostname, self.seq_info["sequence_name"])
+
+        print("IMAGE SIZE: {} RATIO: {}".format(image_size, aspect_ratio))
         #     to display
         self._image_shape = 1024, int(aspect_ratio * 1024)
 
-        self.window_name = "%s Figure %s" % (self.hostname, self.seq_info["sequence_name"])
+
 
         # set the flag to load and display image
         self._loading_index = 0
@@ -163,26 +188,49 @@ class PoolLoader(object):
                 self._loadingState = ThreadState.Finished
                 return
 
-            if self._loading_index > self.max_frame_idx:
-                if self._loadingState == ThreadState.Running:
-                    self._loadingState = ThreadState.Finished
-
             if self._reading_queue.full() or self._loadingState == ThreadState.Init \
                     or self._loadingState == ThreadState.Finished:
                 time.sleep(0.01)
                 continue
-            #  we will load and do any preprocessing here
-            image = cv2.imread(self.image_filenames[self._loading_index], cv2.IMREAD_COLOR)
-            if self.crop_image:
-                sx = self.crop_image[2]
-                sy = self.crop_image[0]
-                ex = image.shape[1] - self.crop_image[3]
-                ey = image.shape[0] - self.crop_image[2]
 
-                self._reading_queue.put_nowait(image[sy:ey, sx:ex])
+
+            #  we will load and do any preprocessing here
+            if self.vcap:
+                ret, image = self.vcap.read()
+                if not ret:
+                    if self._loadingState == ThreadState.Running:
+                        self._loadingState = ThreadState.Finished
+                        self.vcap.release()
+                        self.vcap = None
+                        print('\n Finish load {} from {}'.format(self.frame_index, self.seq_info["video_path"]))
+                else:
+                    if self.crop_image:
+                        sx = self.crop_image[2]
+                        sy = self.crop_image[0]
+                        ex = image.shape[1] - self.crop_image[3]
+                        ey = image.shape[0] - self.crop_image[2]
+
+                        self._reading_queue.put_nowait(image[sy:ey, sx:ex])
+                    else:
+                        self._reading_queue.put_nowait(image)
             else:
-                self._reading_queue.put_nowait(image)
-            self._loading_index += 1
+                if self._loading_index > self.max_frame_idx:
+                    if self._loadingState == ThreadState.Running:
+                        self._loadingState = ThreadState.Finished
+                else:
+                    image = cv2.imread(self.image_filenames[self._loading_index], cv2.IMREAD_COLOR)
+                    self._loading_index += 1
+
+                    if self.crop_image:
+                        sx = self.crop_image[2]
+                        sy = self.crop_image[0]
+                        ex = image.shape[1] - self.crop_image[3]
+                        ey = image.shape[0] - self.crop_image[2]
+
+                        self._reading_queue.put_nowait(image[sy:ey, sx:ex])
+                    else:
+                        self._reading_queue.put_nowait(image)
+
 
     def read(self):
         '''
@@ -240,7 +288,7 @@ class PoolLoader(object):
         cv2.rectangle(self.image, pt1, pt2, self._color, self.thickness)
         if label is not None:
             text_size = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_PLAIN, 2, self.thickness)
+                label, cv2.FONT_HERSHEY_PLAIN, self._textsize, self.thickness)
             if pos == 0:
                 center = pt1[0] + 5, pt1[1] + 5 + text_size[0][1]
                 label_pt1 = pt1
@@ -254,7 +302,7 @@ class PoolLoader(object):
 
             cv2.rectangle(self.image, label_pt1, label_pt2, self._color, -1)
             cv2.putText(self.image, label, center, cv2.FONT_HERSHEY_PLAIN,
-                        2, (255, 255, 255), self.thickness)
+                        self._textsize, (255, 255, 255), self.thickness)
 
     @property
     def color(self):
@@ -280,10 +328,18 @@ class PoolLoader(object):
             except Exception:
                 time.sleep(0.01)
 
+    def queue_confirmed_tracklet(self, confirmed_tracked):
+        while self.seq_info["show_tracklets"]:
+            try:
+                self._tracker_queue.put_nowait(confirmed_tracked)
+                return
+            except Exception:
+                time.sleep(0.01)
+
     def queue_tracklets(self, tracks):
         confirmed_tracked = []
         for track in tracks:
-            if not track.is_confirmed() or track.time_since_update > 0:
+            if not track.is_confirmed() or track.time_since_update > 1:
                 continue
             entry = {}
             entry["trackID"] = track.track_id
@@ -318,9 +374,12 @@ class PoolLoader(object):
 
                 if self._loadingState == ThreadState.Finished:
                     if self._displayState == ThreadState.Running:
-                        self.image[:] = 0
-                        cv2.destroyWindow(self.window_name)
-                        print("Finished {}".format(self.window_name))
+                        try:
+                            self.image[:] = 0
+                            cv2.destroyWindow(self.window_name)
+                        except Exception as e:
+                            print(e)
+                        # print("Finished {}".format(self.window_name))
                         self._displayState = ThreadState.Finished
                     time.sleep(0.1)
                     continue
@@ -373,14 +432,20 @@ class PoolLoader(object):
 
             self._display_queue.task_done()
         print("Exit")
-        self.image[:] = 0
-        cv2.destroyWindow(self.window_name)
+
+        try:
+            self.image[:] = 0
+            cv2.destroyWindow(self.window_name)
+        except Exception as e:
+            print(e)
 
     def stop(self):
         print("STOP VISUALIZER NOW")
         self._terminate = True
         self._loading_thread.join()
         self._display_thread.join()
+        if self.vcap:
+            self.vcap.release()
 
     def __del__(self):
         try:
@@ -393,22 +458,41 @@ class PoolLoader(object):
 
 
 if __name__ == "__main__":
+
     seq_info = {}
+    seq_info["input_type"] = "video"
+    seq_info["video_path"] = "/datasets/dash_cam_video/Driving Downtown - Torontos Main Street 4K - Canada.mp4"
     seq_info["update_ms"] = 60
     seq_info["show_detections"] = False
     seq_info["show_tracklets"] = False
-    pool_display = PoolLoader(None)
+    pool_display = PoolLoader(20)
 
-    dataset = r"/datasets/kitti_tracking/image/"
-    for sequence in os.listdir(dataset):
-        sequence_dir = os.path.join(dataset, sequence)
-        seq_info["imgdir"] = sequence_dir
-        seq_info["sequence_name"] = sequence
-        pool_display.load(seq_info)
-        while True:
-            try:
-                pool_display.read()
-            except Exception as e:
-                break
+    pool_display.load(seq_info)
+    while True:
+        try:
+            pool_display.read()
+        except Exception as e:
+            break
 
     pool_display.stop()
+
+    # seq_info = {}
+    # seq_info["input_type"] = "images"
+    # seq_info["update_ms"] = 60
+    # seq_info["show_detections"] = False
+    # seq_info["show_tracklets"] = False
+    # pool_display = PoolLoader(None)
+    #
+    # dataset = r"/datasets/kitti_tracking/image/"
+    # for sequence in os.listdir(dataset):
+    #     sequence_dir = os.path.join(dataset, sequence)
+    #     seq_info["imgdir"] = sequence_dir
+    #     seq_info["sequence_name"] = sequence
+    #     pool_display.load(seq_info)
+    #     while True:
+    #         try:
+    #             pool_display.read()
+    #         except Exception as e:
+    #             break
+    #
+    # pool_display.stop()

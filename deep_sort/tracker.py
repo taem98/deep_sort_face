@@ -37,7 +37,7 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.7, max_age=30, n_init=3):
+    def __init__(self, metric, encoder, max_iou_distance=0.7, max_age=30, n_init=3):
         self.metric = metric
         self.max_iou_distance = max_iou_distance
         self.max_age = max_age
@@ -48,6 +48,7 @@ class Tracker:
         self._next_id = 1
         self._match_apperance = 0
         self._match_iou = 0
+        self.encoder = encoder
 
     def predict(self):
         """Propagate track state distributions one time step forward.
@@ -57,7 +58,7 @@ class Tracker:
         for track in self.tracks:
             track.predict(self.kf)
 
-    def update(self, detections):
+    def update(self, detections, frame, frame_idx):
         """Perform measurement update and track management.
 
         Parameters
@@ -74,8 +75,28 @@ class Tracker:
         for track_idx, detection_idx in matches:
             self.tracks[track_idx].update(
                 self.kf, detections[detection_idx])
+        predicted_bbox = []
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
+            if self.tracks[track_idx].is_confirmed() and self.tracks[track_idx].time_since_update < 2:
+                tlbr = self.tracks[track_idx].to_tlbr()
+                predicted_bbox.append([frame_idx, track_idx, tlbr[0], tlbr[1], tlbr[2], tlbr[3], 1,
+                                      self.tracks[track_idx].det_meta[-1][2], -1, -1])
+
+        if len(predicted_bbox) > 0:
+            detections_2 = self.encoder.encoding(frame, np.asarray(predicted_bbox), frame_idx)
+            # detection_indices_2 = [idx for idx, det in enumerate(detections_2)]
+            if len(detections_2) > 0:
+                detections_2 = np.asarray(detections_2)
+                unmatched_track_indices = detections_2[:,1].astype(np.int)
+                targets_2 = [self.tracks[idx].track_id for idx in unmatched_track_indices]
+                cost_matrix_2 = self.metric.distance_from_predict(detections_2[:,10:], targets_2)
+                for idx, track_idx in enumerate(unmatched_track_indices):
+                    if cost_matrix_2[idx] < self.metric.matching_threshold:
+                        self.tracks[track_idx].update_from_predict(detections_2[idx])
+
+        # for idx, raw_detect in enumerate(predicted_bbox):
+
         for detection_idx in unmatched_detections:
             self._initiate_track(detections[detection_idx])
         self.tracks = [t for t in self.tracks if not t.is_deleted()]
@@ -136,6 +157,5 @@ class Tracker:
     def _initiate_track(self, detection):
         mean, covariance = self.kf.initiate(detection.to_xyah())
         self.tracks.append(Track(
-            mean, covariance, self._next_id, self.n_init, self.max_age,
-            detection.feature, detection.detection_id))
+            mean, covariance, self._next_id, self.n_init, self.max_age, detection))
         self._next_id += 1

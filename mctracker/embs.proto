@@ -16,6 +16,12 @@ message request {
     required uint32 requestid = 1;
 }
 
+message ImageShape {
+    required uint32 height = 1;
+    required uint32 width = 2;
+    optional uint32 channel = 3;
+}
+
 message command {
     enum Command {
         PAUSE = 0;
@@ -29,10 +35,10 @@ message command {
 }
 
 message bbox {
-    required uint32 top = 1;
-    required uint32 left = 2;
-    required uint32 bot = 3;
-    required uint32 right = 4;
+    required int32 top = 1;
+    required int32 left = 2;
+    required uint32 width = 3;
+    required uint32 height = 4;
 }
 
 message embeddings {
@@ -40,7 +46,8 @@ message embeddings {
     repeated double weight = 2 [packed=true];
     required double confidence = 3;
     required uint32 labelid = 4;
-    required uint32 frame_time = 5; // frame time
+    required uint64 frame_time = 5; // frame time
+    required bbox det_bbox = 6;
 }
 
 message payloads {
@@ -48,4 +55,5 @@ message payloads {
     repeated embeddings embs = 2;
     required uint32 embs_num = 3;
     required uint32 time = 4;
+    required ImageShape imgshape = 5;
 }

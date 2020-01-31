@@ -84,4 +84,12 @@ def parse_args():
         default=0, type=int
     )
 
+    parser.add_argument(
+        "--show_detections", help="Show the detection with correspoding track bboxs",
+        default=False, type=bool_string
+    )
+    parser.add_argument(
+        "--show_trackdet_bbox", help="Show the track ID with detection bboxs",
+        default=True, type=bool_string
+    )
     return parser

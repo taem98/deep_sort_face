@@ -54,6 +54,7 @@ def run(args):
     try:
         detection_cfg = load_json_config(os.path.join(result_folder, "config_detector.json"))
         extractor_cfg = load_json_config(os.path.join(result_folder, "config_extractor.json"))
+        seq_info = load_json_config(os.path.join(result_folder, "config_loader.json"))
     except Exception as e:
         print(e)
         print("MUST CONFIGURE THE CORRECT config_detector and config_extractor file")
@@ -81,13 +82,7 @@ def run(args):
                          args.extractor_batchsize)
     detector.isSaveRes = False
     encoder.isSaveRes = False
-    # if running_cfg == "from_detect" or running_cfg == "from_encoded":
-        # print("Extractor config: %s" % extractor_cfg['name'])
-        #
-    seq_info = {}
-    seq_info["update_ms"] = 100
-    seq_info["show_detections"] = True
-    seq_info["show_tracklets"] = True
+
     pool_display = PoolLoader(20)
 
     specific_sequence = args.sequence
@@ -104,7 +99,7 @@ def run(args):
                 pool_display.load(seq_info)
                 metric = nn_matching.NearestNeighborDistanceMetric(
                     "cosine", args.max_cosine_distance, args.nn_budget)
-                tracker = Tracker(metric, max_iou_distance=0.6)
+                tracker = Tracker(metric, encoder, max_iou_distance=0.6, n_init=3)
                 # mctracker.updateSingleTracker(tracker, metric)
 
                 while True:
@@ -118,26 +113,44 @@ def run(args):
 
                     _t0 = time.time()
                     raw_detections = detector(frame, frame_idx)
+
+                    detections = []
+                    boxes = []
+                    scores = []
+                    for idx, raw_detection in enumerate(raw_detections):
+                        if raw_detection[detector.SCORE] >= args.min_confidence and raw_detection[detector.HEIGHT] > args.min_detection_height:
+                            boxes.append([raw_detection[detector.TOP], raw_detection[detector.LEFT],
+                                          raw_detection[detector.WIDTH], raw_detection[detector.HEIGHT]])
+                            scores.append(raw_detection[detector.SCORE])
+                            detections.append(raw_detection)
+
+                    boxes = np.asarray(boxes)
+                    indices = preprocessing.non_max_suppression(
+                        boxes, args.nms_max_overlap, scores)
+
+                    raw_detections = [detections[i] for i in indices]
+
                     # _t1 = time.time() - _t0
                     detections = encoder(frame, raw_detections, frame_idx)
                     # _t2 = time.time() - _t1
 
-                    detections = [d for d in detections if d.confidence >= args.min_confidence and d.tlwh[3] > args.min_detection_height]
-
-                    # Run non-maxima suppression.
-                    boxes = np.array([d.tlwh for d in detections])
-                    scores = np.array([d.confidence for d in detections])
-                    indices = preprocessing.non_max_suppression(
-                        boxes, args.nms_max_overlap, scores)
-                    detections = [detections[i] for i in indices]
-
                     # Update tracker.
                     tracker.predict()
-                    tracker.update(detections)
+                    tracker.update(detections, frame, frame_idx)
                     pool_display.last_proctime = time.time() - _t0
 
                     pool_display.queue_detection(detections)
-                    pool_display.queue_tracklets(tracker.tracks)
+
+                    confirmed_tracked = []
+                    for track in tracker.tracks:
+                        if not track.is_confirmed() or track.time_since_update > 1:
+                            continue
+                        entry = {}
+                        entry["trackID"] = track.track_id
+                        entry["bboxs"] = track.to_tlwh()
+                        confirmed_tracked.append(entry)
+
+                    pool_display.queue_confirmed_tracklet(confirmed_tracked)
 
 
     try:

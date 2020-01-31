@@ -1,5 +1,5 @@
 # vim: expandtab:ts=4:sw=4
-
+import numpy as np
 
 class TrackState:
     """
@@ -14,7 +14,7 @@ class TrackState:
     Tentative = 1
     Confirmed = 2
     Deleted = 3
-
+    Predicted = 4
 
 class Track:
     """
@@ -63,27 +63,32 @@ class Track:
 
     """
 
-    def __init__(self, mean, covariance, track_id, n_init, max_age,
-                 feature=None, detection_id=0):
+    def __init__(self, mean, covariance, track_id, n_init, max_age, detection):
         self.mean = mean
         self.covariance = covariance
         self.track_id = track_id
+        # self.class_labelid = label_id
         self.hits = 1
         self.age = 1
         self.time_since_update = 0
 
         self.state = TrackState.Tentative
         self.features = []
-        self.detection_bboxs = None
+        self.predicted_features = []
 
-        if feature is not None:
-            self.features.append(feature)
+        self.det_meta = []
+
+        if detection:
+            self.det_meta.append([detection.frame_idx, detection.tlwh, detection.label])
+            self.features.append(detection.feature)
+
         # if label is not None:
-        self.detection_id = detection_id
+        # self.detection_id = detection_id
         self._n_init = n_init
         self._max_age = max_age
         self.affinity_score = 0.0
         self.iou_score = 0.0
+
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
@@ -128,6 +133,18 @@ class Track:
         self.age += 1
         self.time_since_update += 1
 
+    def update_from_predict(self, detection):
+        # self.features.append(detection.feature)
+        # if self.state == TrackState.Confirmed:
+        # previous_label = self.det_meta[-1][2]
+        self.det_meta.append([detection[0], self.to_tlwh(), detection[7]])
+        # self.state = TrackState.Predicted
+        self.hits += 1
+        # self.time_since_update = 0
+        self.features.append(detection[10:])
+        # if self.state == TrackState.Predicted:
+        #  should not use the predicted result in consecutive frame
+
     def update(self, kf, detection):
         """Perform Kalman filter measurement update step and update the feature
         cache.
@@ -142,12 +159,20 @@ class Track:
         """
         self.mean, self.covariance = kf.update(
             self.mean, self.covariance, detection.to_xyah())
-        self.detection_bboxs = detection.tlwh.copy()
-        self.features.append(detection.feature)
-        self.detection_id = detection.detection_id
+
+        if detection:
+            self.det_meta.append([detection.frame_idx, detection.tlwh, detection.label])
+            self.features.append(detection.feature)
+
+        # for pf in self.predicted_features:
+        #     self.features.append(pf)
+        # self.predicted_features = []
+        # self.detection_id = detection.detection_id
         self.hits += 1
         self.time_since_update = 0
         if self.state == TrackState.Tentative and self.hits >= self._n_init:
+            self.state = TrackState.Confirmed
+        if self.state == TrackState.Predicted:
             self.state = TrackState.Confirmed
 
     def mark_missed(self):
@@ -170,3 +195,6 @@ class Track:
     def is_deleted(self):
         """Returns True if this track is dead and should be deleted."""
         return self.state == TrackState.Deleted
+
+    def is_predicted(self):
+        return  self.state == TrackState.Predicted

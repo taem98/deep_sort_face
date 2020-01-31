@@ -69,15 +69,19 @@ class McTrack:
         self.ego_hit = 1
         self.state = TrackState.Tentative
 
-        self.detection_bboxs = None
-
+        self.ego_bboxs_sample = {}
+        self._last_broadcast = 0
         self.features = {}
         self.remotes_id = {}
+        self.remote_time_since_updates = {}
         self.remote_time_since_update = 0
+
         # if label is not None:
         self.detection_id = detection_id
         self._n_init = n_init
         self._max_age = max_age
+        self.affinity_score = 0.0
+        self.iou_score = 0.0
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
@@ -136,6 +140,8 @@ class McTrack:
         # self.detection_bboxs = detection.tlwh.copy()
 
         hit = self.remotes_id.setdefault(id, 0)
+        self.remote_time_since_updates.setdefault(id, 0)
+        self.remote_time_since_updates[id] = 0
         self.remotes_id[id] = hit + 1
         self.features.setdefault(id, []).append(feature)
         self.remote_hits += 1
@@ -143,11 +149,14 @@ class McTrack:
         if self.state == TrackState.Tentative and self.remote_hits >= self._n_init:
             self.state = TrackState.Confirmed
 
+    def mark_deleted(self):
+        self.state = TrackState.Deleted
+
     def mark_missed(self):
         """Mark this track as missed (no association at the current time step).
         """
         if self.state == TrackState.Tentative:
-            if self.ego_time_since_update > 3:
+            if self.ego_time_since_update > 30:
                 self.state = TrackState.Deleted
         elif self.remote_time_since_update > self._max_age:
             self.state = TrackState.Deleted

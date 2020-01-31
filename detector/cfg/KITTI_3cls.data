@@ -1,0 +1,6 @@
+classes = 3
+train  = datasets/kitti/train_kitti_3cls_list_new.txt
+valid  = datasets/kitti/valid_kitti_3cls_list_new.txt
+names = detector/data/kitti_3cls.names
+backup = backup
+eval = kitti

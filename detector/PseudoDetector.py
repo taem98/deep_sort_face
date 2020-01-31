@@ -65,7 +65,7 @@ class PseudoDetector(NoneDetector):
         if not self._from_file and self.isSaveRes:
             # detections = self._detections_list[0:9]
             # np_arr = np.asarray(self._detections_list, dtype=self._dtype)
-            np_arr = np.asarray(self._detections_list, dtype=np.float32)
+            np_arr = np.asarray(self._detections_list, dtype=np.float64)
             output_filename = os.path.join(output_dir, "%s.npy" % sequence)
             output_txtname = os.path.join(output_dir, "%s.txt" % sequence)
 

@@ -43,7 +43,7 @@ class TripletNet(PseudoEncoder):
         except Exception:
             pass
 
-    def __call__(self, image, raw_detections, frame_id):
+    def encoding(self, image, raw_detections, frame_id):
         image_patches = []
         image_patches_id = []
         for idx, detect in enumerate(raw_detections):
@@ -64,6 +64,10 @@ class TripletNet(PseudoEncoder):
         #                detect_res[id][2], detect_res[id][3], -1, -1, features[idx])
         #               for idx, id in enumerate(image_patches_id)]
         detections = [np.r_[raw_detections[id][0:10], features[idx]] for idx, id in enumerate(image_patches_id)]
+        return detections
+
+    def __call__(self, image, raw_detections, frame_id):
+        detections = self.encoding(image, raw_detections, frame_id)
         # detections = [Detection(detect_res[id][0], detect_res[id][1], features[idx], detect_res[id][3]) for idx, id in enumerate(image_patches_id)]
         res = super().__call__(image, detections, frame_id)
         return res

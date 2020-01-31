@@ -1,0 +1,10 @@
+{
+  "name" : "Gaussian YOLOv3 Kitti 3 cls 512x512",
+  "type" : "Yolo",
+  "cfg_path" : "./detector/cfg/Gaussian_yolov3_KITTI_3cls.cfg" ,
+  "meta_path" : "./detector/cfg/KITTI_3cls.data" ,
+  "weight_path" : "./tmp/yolo/Gaussian_yolov3_KITTI_3cls_best.weights",
+  "sharelibPath" : "../alex_darknet/libdarknet.so",
+  "metaFile" : "detector/data/kitti_3cls.names",
+  "class_filter" : [0]
+}

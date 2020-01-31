@@ -68,7 +68,7 @@ class PseudoEncoder(object):
                 bbox, confidence, feature, label = row[2:6], row[6], row[10:], self._altName[row[7]]
             else:
                 bbox, confidence, feature, label = row[2:6], row[6], row[10:], row[7]
-            res.append(Detection(bbox, confidence, feature, label, self._detection_id))
+            res.append(Detection(bbox, confidence, feature, label, frame_id))
             self._detection_id += 1
         return res
 

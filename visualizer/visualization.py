@@ -89,13 +89,17 @@ class Visualization(object):
     def __init__(self, seq_info, update_ms):
         image_shape = seq_info["image_size"][::-1]
         aspect_ratio = float(image_shape[1]) / image_shape[0]
-        image_shape = 1024, int(aspect_ratio * 1024)
+        try:
+            image_shape = seq_info['image_shape'], int(seq_info['image_shape'] * aspect_ratio)
+        except KeyError:
+            image_shape = 1024, int(aspect_ratio * 1024)
 
         import socket
 
         self.viewer = ImageViewer(
             update_ms, image_shape, "%s Figure %s" % (socket.gethostname(), seq_info["sequence_name"]))
         self.viewer.thickness = 2
+        self.viewer.text_size = seq_info['text_size']
         self.frame_idx = seq_info["min_frame_idx"]
         self.last_idx = seq_info["max_frame_idx"]
 
@@ -136,7 +140,7 @@ class Visualization(object):
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
             #                      label="%d" % track.track_id)
 #
-    def draw_trackers_with_othertag(self, tracks, matching, detection_bbox = False, target_color=0, debug=0):
+    def draw_trackers_with_othertag(self, tracks, matching, detection_bbox = False, target_color=0, debug=0, evaluator=None):
         self.viewer.thickness = 2
         if debug == 2:
             for track in tracks:
@@ -166,14 +170,17 @@ class Visualization(object):
                 else:
                     self.viewer.rectangle(
                         *track.detection_bboxs.astype(np.int), label=label_str)
+                if evaluator:
+                    evaluator.append(self.frame_idx, )
 
         elif debug == 1:
             for track in tracks:
-                if not track.is_confirmed() or track.time_since_update > 0:
+                if not track.is_predicted() and not track.is_confirmed() or track.time_since_update > 1:
                     continue
                 label_str = "{}".format(track.track_id)
-                label_str += "_{0:.2f}".format(track.affinity_score)
-                label_str += "_{0:.2f}".format(track.iou_score)
+                if track.affinity_score > 0.1:
+                    label_str += "_{0:.2f}".format(track.affinity_score)
+                    label_str += "_{0:.2f}".format(track.iou_score)
                 track.affinity_score = 0.0
                 track.iou_score = 0.0
                 target_id = None
@@ -186,19 +193,23 @@ class Visualization(object):
                     self.viewer.color = create_unique_color_uchar(target_id)
                 else:
                     self.viewer.color = create_unique_color_uchar(track.track_id)
-                # self.viewer.rectangle(
-                #     *track.to_tlwh().astype(np.int), label=label_str)
+
+
+                # class_id = int(track.det_meta[-1][2])
+
                 if not detection_bbox:
                     self.viewer.rectangle(
                         *track.to_tlwh().astype(np.int), label=label_str)
                 else:
+                    bbox = track.det_meta[-1][1].astype(np.int)
+                    # bbox[2:] += bbox[:2]
                     self.viewer.rectangle(
-                        *track.detection_bboxs.astype(np.int), label=label_str)
+                        *bbox, label=label_str)
 
 
         else:
             for track in tracks:
-                if not track.is_confirmed() or track.time_since_update > 0:
+                if not track.is_predicted() and not track.is_confirmed() or track.time_since_update > 1:
                     continue
                 label_str = "{}".format(track.track_id)
                 target_id = None
@@ -219,3 +230,8 @@ class Visualization(object):
                 else:
                     self.viewer.rectangle(
                         *track.detection_bboxs.astype(np.int), label=label_str)
+
+                if evaluator and target_id:
+                    bbox = track.detection_bboxs.astype(np.int)
+                    bbox[2:] += bbox[:2]
+                    evaluator.append2(target_id, bbox, int(track.class_labelid))

@@ -18,6 +18,30 @@ def run_in_batches(f, data_dict, out, batch_size):
 
 def extract_image_with_crop(image, bbox, patch_shape):
     image_size = image.shape[:2]
+    bbox = np.array(bbox)
+    # we take top-left top-right bot-left bot-right
+    if patch_shape is not None:
+        # correct aspect ratio to patch shape
+        target_aspect = float(patch_shape[1]) / patch_shape[0]
+        new_height = target_aspect * bbox[2] * 1.4
+        bbox[0] -= (new_height - bbox[2]) / 2
+        bbox[1] -= (new_height - bbox[3]) / 2
+        bbox[2] = new_height
+        bbox[3] = new_height
+
+    # convert to top left, bottom right
+    bbox[2:] += bbox[:2]
+    bbox = bbox.astype(np.int)
+
+    # clip at image boundaries
+    bbox[:2] = np.maximum(0, bbox[:2])
+    bbox[2:] = np.minimum(np.asarray(image.shape[:2][::-1]) - 1, bbox[2:])
+    if np.any(bbox[:2] >= bbox[2:]):
+        return None
+    sx, sy, ex, ey = bbox
+    image = image[sy:ey, sx:ex]
+    image = cv2.resize(image, tuple(patch_shape[::-1]))
+    return image
     # if patch_shape
 
 def extract_image_patch(image, bbox, patch_shape):

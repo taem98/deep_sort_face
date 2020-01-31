@@ -112,6 +112,7 @@ class ImageViewer(object):
         self.thickness = 1.5
         self.is_frame_updated = False
         self._t0 = time.time()
+        self.text_size = 1
 
     def show_image(self):
         if self.is_frame_updated:
@@ -156,7 +157,7 @@ class ImageViewer(object):
         cv2.rectangle(self.image, pt1, pt2, self._color, self.thickness)
         if label is not None:
             text_size = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_PLAIN, 1, self.thickness)
+                label, cv2.FONT_HERSHEY_PLAIN, self.text_size, self.thickness)
             if pos == 0:
                 center = pt1[0] + 5, pt1[1] + 5 + text_size[0][1]
                 label_pt1 = pt1
@@ -170,7 +171,7 @@ class ImageViewer(object):
 
             cv2.rectangle(self.image, label_pt1, label_pt2, self._color, -1)
             cv2.putText(self.image, label, center, cv2.FONT_HERSHEY_PLAIN,
-                        1, (255, 255, 255), self.thickness)
+                        self.text_size, (255, 255, 255), self.thickness)
 
     def circle(self, x, y, radius, label=None):
         """Draw a circle.
