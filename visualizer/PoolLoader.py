@@ -3,7 +3,7 @@ apply multiprocess loading to speed up loading
 just pseudo improvement on
 '''
 
-from queue import Queue
+from queue import Queue, Full, Empty
 import numpy as np
 import time
 import cv2
@@ -128,8 +128,9 @@ class PoolLoader(object):
         self.seq_info = seq_info
 
         if self.seq_info["input_type"] == "video":
-            if not os.path.isfile(self.seq_info["video_path"]):
-                raise FileNotFoundError("Video file not found")
+            # if not os.path.isfile(self.seq_info["video_path"]):
+            #     pass
+                # raise FileNotFoundError("Video file not found")
             # video_name = pathlib.PurePath(videopath)
             self.vcap = cv2.VideoCapture(self.seq_info["video_path"])
             if self.vcap.isOpened():
@@ -138,7 +139,7 @@ class PoolLoader(object):
                 aspect_ratio = height / width
                 image_size = (width, height)
             else:
-                raise Exception("Could not open video")
+                raise Exception("Could not open video {}".format(self.seq_info["video_path"]))
 
             self.window_name = "%s Video %s" % (self.hostname, self.seq_info["video_path"])
         else:
@@ -170,9 +171,11 @@ class PoolLoader(object):
 
         print("IMAGE SIZE: {} RATIO: {}".format(image_size, aspect_ratio))
         #     to display
-        self._image_shape = 1024, int(aspect_ratio * 1024)
-
-
+        try:
+            self._image_shape = seq_info['image_shape'], int(seq_info['image_shape'] * aspect_ratio)
+        except KeyError:
+            self._image_shape = 1024, int(aspect_ratio * 1024)
+        # self._image_shape = 1024, int(aspect_ratio * 1024)
 
         # set the flag to load and display image
         self._loading_index = 0
@@ -242,7 +245,7 @@ class PoolLoader(object):
             try:
                 img = self._reading_queue.get_nowait()
                 break
-            except Exception:
+            except Empty:
                 if self._loadingState == ThreadState.Finished: # this mean loading thread has already finish loading the whole sequence
                     raise Exception("Finished")
                 else:
@@ -251,7 +254,7 @@ class PoolLoader(object):
             try:
                 self._display_queue.put_nowait(img)
                 break
-            except Exception:
+            except Full:
                 time.sleep(0.01)
 
         # if self._is_not_loading:
@@ -325,7 +328,7 @@ class PoolLoader(object):
             try:
                 self._detection_queue.put_nowait(detections)
                 return
-            except Exception:
+            except Full:
                 time.sleep(0.01)
 
     def queue_confirmed_tracklet(self, confirmed_tracked):
@@ -333,7 +336,7 @@ class PoolLoader(object):
             try:
                 self._tracker_queue.put_nowait(confirmed_tracked)
                 return
-            except Exception:
+            except Full:
                 time.sleep(0.01)
 
     def queue_tracklets(self, tracks):
@@ -387,7 +390,7 @@ class PoolLoader(object):
             t0 = time.time()
             try:
                 self.image = self._display_queue.get_nowait()
-            except Exception:
+            except Empty:
                 time.sleep(0.01)
                 continue
 
@@ -400,7 +403,7 @@ class PoolLoader(object):
                         self.rectangle(*detection.tlwh, label=str(int(detection.label)), pos=1)
                     self._detection_queue.task_done()
                     break
-                except Exception:
+                except Empty:
                     time.sleep(0.001)
                     if self._terminate:
                         break
@@ -418,7 +421,7 @@ class PoolLoader(object):
                         self.rectangle(*ret, label=str(track["trackID"]))
                     self._tracker_queue.task_done()
                     break
-                except Exception:
+                except Empty:
                     time.sleep(0.001)
                     if self._terminate:
                         break
@@ -461,17 +464,18 @@ if __name__ == "__main__":
 
     seq_info = {}
     seq_info["input_type"] = "video"
-    seq_info["video_path"] = "/datasets/dash_cam_video/Driving Downtown - Torontos Main Street 4K - Canada.mp4"
-    seq_info["update_ms"] = 60
+    seq_info["video_path"] =  0 #"http://192.168.0.22:8080/video"
+    seq_info["update_ms"] = 20
     seq_info["show_detections"] = False
     seq_info["show_tracklets"] = False
+    seq_info["image_shape"] = 480
     pool_display = PoolLoader(20)
 
     pool_display.load(seq_info)
     while True:
         try:
             pool_display.read()
-        except Exception as e:
+        except KeyboardInterrupt:
             break
 
     pool_display.stop()
