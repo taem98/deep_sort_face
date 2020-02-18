@@ -11,7 +11,7 @@ from application_util import preprocessing
 from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
-from detector.DarknetDetector import Detector
+from detector.MtCNN import MtCNNDetector
 from detector.TensorFlowDetector import TensorFlowDetector
 from detector.PseudoDetector import PseudoDetector, NoneDetector
 from visualizer.VideoLoader import VideoLoader, ImageLoader, NdImageLoader
@@ -71,12 +71,8 @@ def run(args):
     print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
     print("Detector type {} config: {}".format(detection_cfg['type'], detection_cfg['name']))
 
-    if detection_cfg['type'] == "Yolo":
-        detector = Detector(configPath=detection_cfg['cfg_path'], metaPath=detection_cfg['meta_path'],
-                            weightPath=detection_cfg['weight_path'], sharelibPath=detection_cfg['sharelibPath'],
-                            gpu_num = args.gpu)
-    else:
-        detector = TensorFlowDetector(sess, detection_cfg['frozenpb'], class_filter=None, altName=detection_cfg['metaFile'])
+
+    detector = MtCNNDetector(sess, class_filter=None, altName=detection_cfg['metaFile'])
 
     encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'],
                          args.extractor_batchsize)
@@ -88,69 +84,69 @@ def run(args):
     specific_sequence = args.sequence
 
     def run():
-        for sequence in os.listdir(args.sequence_dir):
-            if len(specific_sequence) > 0 and sequence != specific_sequence:
-                continue
-            sequence_dir = os.path.join(args.sequence_dir, sequence)
-            if os.path.isdir(sequence_dir):
+        seq_info["input_type"] = "video"
+        seq_info["video_path"] = "http://192.168.0.22:8080/video" # "/datasets/dash_cam_video/wonder_woman_trailer.mp4"
+        seq_info["update_ms"] = 5
+        seq_info["show_detections"] = True
+        seq_info["show_tracklets"] = False
+        seq_info["image_shape"] = 480
+        pool_display.load(seq_info)
+        metric = nn_matching.NearestNeighborDistanceMetric(
+            "cosine", args.max_cosine_distance, args.nn_budget)
+        tracker = Tracker(metric, encoder, max_iou_distance=0.6, n_init=3)
+        # mctracker.updateSingleTracker(tracker, metric)
 
-                seq_info["imgdir"] = sequence_dir
-                seq_info["sequence_name"] = sequence
-                pool_display.load(seq_info)
-                metric = nn_matching.NearestNeighborDistanceMetric(
-                    "cosine", args.max_cosine_distance, args.nn_budget)
-                tracker = Tracker(metric, encoder, max_iou_distance=0.6, n_init=3)
-                # mctracker.updateSingleTracker(tracker, metric)
+        while True:
+            try:
+                frame_idx, frame = pool_display.read()
+                # if frame_idx % 10 != 0:
+                #     pass
+            except Exception as e:
+                print(e)
+                break
 
-                while True:
-                    try:
-                        frame_idx, frame = pool_display.read()
-                    except Exception as e:
-                        print(e)
-                        break
+            # print("Processing frame %05d" % frame_idx)
+            # continue
+            _t0 = time.time()
+            raw_detections = detector(frame, frame_idx)
+            # continue
+            detections = []
+            boxes = []
+            scores = []
+            for idx, raw_detection in enumerate(raw_detections):
+                if raw_detection[detector.SCORE] >= args.min_confidence and raw_detection[detector.HEIGHT] > args.min_detection_height:
+                    boxes.append([raw_detection[detector.TOP], raw_detection[detector.LEFT],
+                                  raw_detection[detector.WIDTH], raw_detection[detector.HEIGHT]])
+                    scores.append(raw_detection[detector.SCORE])
+                    detections.append(raw_detection)
 
-                    # print("Processing frame %05d" % frame_idx)
+            boxes = np.asarray(boxes)
+            indices = preprocessing.non_max_suppression(
+                boxes, args.nms_max_overlap, scores)
 
-                    _t0 = time.time()
-                    raw_detections = detector(frame, frame_idx)
+            raw_detections = [detections[i] for i in indices]
+            # continue
+            # _t1 = time.time() - _t0
+            detections = encoder(frame, raw_detections, frame_idx)
+            # _t2 = time.time() - _t1
 
-                    detections = []
-                    boxes = []
-                    scores = []
-                    for idx, raw_detection in enumerate(raw_detections):
-                        if raw_detection[detector.SCORE] >= args.min_confidence and raw_detection[detector.HEIGHT] > args.min_detection_height:
-                            boxes.append([raw_detection[detector.TOP], raw_detection[detector.LEFT],
-                                          raw_detection[detector.WIDTH], raw_detection[detector.HEIGHT]])
-                            scores.append(raw_detection[detector.SCORE])
-                            detections.append(raw_detection)
+            # Update tracker.
+            tracker.predict()
+            tracker.update(detections, frame, frame_idx)
+            pool_display.last_proctime = time.time() - _t0
 
-                    boxes = np.asarray(boxes)
-                    indices = preprocessing.non_max_suppression(
-                        boxes, args.nms_max_overlap, scores)
+            pool_display.queue_detection(detections)
 
-                    raw_detections = [detections[i] for i in indices]
+            confirmed_tracked = []
+            for track in tracker.tracks:
+                if not track.is_confirmed() or track.time_since_update > 1:
+                    continue
+                entry = {}
+                entry["trackID"] = track.track_id
+                entry["bboxs"] = track.to_tlwh()
+                confirmed_tracked.append(entry)
 
-                    # _t1 = time.time() - _t0
-                    detections = encoder(frame, raw_detections, frame_idx)
-                    # _t2 = time.time() - _t1
-
-                    # Update tracker.
-                    tracker.predict()
-                    tracker.update(detections, frame, frame_idx)
-                    pool_display.last_proctime = time.time() - _t0
-
-                    pool_display.queue_detection(detections)
-
-                    confirmed_tracked = []
-                    for track in tracker.tracks:
-                        if not track.is_confirmed() or track.time_since_update > 1:
-                            continue
-                        entry = {}
-                        entry["trackID"] = track.track_id
-                        entry["bboxs"] = track.to_tlwh()
-                        confirmed_tracked.append(entry)
-
-                    pool_display.queue_confirmed_tracklet(confirmed_tracked)
+            pool_display.queue_confirmed_tracklet(confirmed_tracked)
 
 
     try:
@@ -162,7 +158,10 @@ def run(args):
     finally:
         print("Release")
         pool_display.stop()
-        sess.close()
+        try:
+            sess.close()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     args = parse_args()
