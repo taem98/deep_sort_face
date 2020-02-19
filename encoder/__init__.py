@@ -89,5 +89,6 @@ def extract_image_patch(image, bbox, patch_shape):
         return None
     sx, sy, ex, ey = bbox
     image = image[sy:ey, sx:ex]
-    image = cv2.resize(image, tuple(patch_shape[::-1]))
+    if patch_shape:
+        image = cv2.resize(image, tuple(patch_shape[::-1]))
     return image

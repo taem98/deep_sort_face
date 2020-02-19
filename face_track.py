@@ -16,7 +16,7 @@ from detector.TensorFlowDetector import TensorFlowDetector
 from detector.PseudoDetector import PseudoDetector, NoneDetector
 from visualizer.VideoLoader import VideoLoader, ImageLoader, NdImageLoader
 # --sequence_dir=/media/msis_dasol/1TB/dataset/test/MOT16-06 --detection_file=/media/msis_dasol/1TB/nn_pretrained/MOT16_POI_test/MOT16-06.npy --min_confidence=0.3 --nn_budget=100
-from encoder.TripletNet import TripletNet
+from encoder.TripletNet import FaceNet
 from encoder.PseudoEncoder import PseudoEncoder
 import tensorflow as tf
 from evaluator.Evaluator import Evaluator
@@ -74,7 +74,7 @@ def run(args):
 
     detector = MtCNNDetector(sess, class_filter=None, altName=detection_cfg['metaFile'])
 
-    encoder = TripletNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'],
+    encoder = FaceNet(sess, extractor_cfg['frozen_ckpt'], detection_cfg['class_filter'],
                          args.extractor_batchsize)
     detector.isSaveRes = False
     encoder.isSaveRes = False
@@ -85,7 +85,8 @@ def run(args):
 
     def run():
         seq_info["input_type"] = "video"
-        seq_info["video_path"] = "http://192.168.0.22:8080/video" # "/datasets/dash_cam_video/wonder_woman_trailer.mp4"
+        # seq_info["video_path"] = "http://192.168.0.22:8080/video" #
+        seq_info["video_path"] =  "/datasets/dash_cam_video/wonder_woman_trailer.mp4"
         seq_info["update_ms"] = 5
         seq_info["show_detections"] = True
         seq_info["show_tracklets"] = False
