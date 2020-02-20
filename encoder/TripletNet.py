@@ -80,6 +80,7 @@ class FaceNet(PseudoEncoder):
         self._batch_size = batch_size
         self._class_filter = class_filter
         self.session = sess
+
         with tf.gfile.GFile(checkpoint_filename, "rb") as file_handle:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(file_handle.read())
@@ -90,6 +91,7 @@ class FaceNet(PseudoEncoder):
         #         print(op.name)
 
         # print(tf.global_variables())
+
         self.input_var = tf.get_default_graph().get_tensor_by_name(
             "facenet/input:0")
         self.output_var = tf.get_default_graph().get_tensor_by_name(
@@ -102,11 +104,24 @@ class FaceNet(PseudoEncoder):
         self.feature_dim = self.output_var.get_shape().as_list()[-1]
         self.image_shape = [160,160,3]
 
+    def prewhiten(self, x):
+        mean = np.mean(x)
+        std = np.std(x)
+        std_adj = np.maximum(std, 1.0/np.sqrt(x.size))
+        y = np.multiply(np.subtract(x, mean), 1/std_adj)
+        return y
+
     def _encode(self, data_x):
         # out = np.zeros((len(data_x), self.feature_dim), np.float32)
-        feed_dict = {self.input_var: data_x, self.phase_train_placeholder: False}
-        out = self.session.run(self.output_var, feed_dict= feed_dict)
-        return out
+        features = []
+        for data in data_x:
+            prewhiten_face = self.prewhiten(data)
+            prewhiten_face = cv2.resize(prewhiten_face, (160, 160))
+            feed_dict = {self.input_var: [prewhiten_face], self.phase_train_placeholder: False}
+            out = self.session.run(self.output_var, feed_dict= feed_dict)
+            features.append(out[0])
+        return features
+
 
     def __del__(self):
         try:
@@ -130,6 +145,7 @@ class FaceNet(PseudoEncoder):
         # image_patches = np.asarray(image_patches)
         if len(image_patches):
             features = self._encode(image_patches)
+            features = np.asarray(features)
         # return as MOT 16 format with detection
         # detections = [(detect_res[id][0], -1,
         #                detect_res[id][1][0], detect_res[id][1][1], detect_res[id][1][2], detect_res[id][1][3],

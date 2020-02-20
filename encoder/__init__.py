@@ -44,6 +44,7 @@ def extract_image_with_crop(image, bbox, patch_shape):
     return image
     # if patch_shape
 
+
 def extract_image_patch(image, bbox, patch_shape):
     """Extract image patch from bounding box.
 

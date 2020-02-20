@@ -25,6 +25,7 @@ from tools.default_args import *
 from mctracker.mctracker import MultiCameraTracker
 from visualizer.PoolLoader import PoolLoader
 
+
 def load_json_config(jsonfile):
     with open(jsonfile, "r") as f:
         config = json.load(f)
@@ -86,10 +87,11 @@ def run(args):
     def run():
         seq_info["input_type"] = "video"
         # seq_info["video_path"] = "http://192.168.0.22:8080/video" #
-        seq_info["video_path"] =  "/datasets/dash_cam_video/wonder_woman_trailer.mp4"
+        # seq_info["video_path"] =  "/datasets/dash_cam_video/wonder_woman_trailer.mp4"
+        seq_info["video_path"] = 0
         seq_info["update_ms"] = 5
         seq_info["show_detections"] = True
-        seq_info["show_tracklets"] = False
+        seq_info["show_tracklets"] = True
         seq_info["image_shape"] = 480
         pool_display.load(seq_info)
         metric = nn_matching.NearestNeighborDistanceMetric(
