@@ -431,7 +431,7 @@ class PoolLoader(object):
             # is_cv_show = True
             t1 = time.time()
             remaining_time = max(1, int(self.seq_info["update_ms"] - 1e3 * (t1 - t0)))
-            key = cv2.waitKey(remaining_time)
+
 
             self._display_queue.task_done()
         print("Exit")

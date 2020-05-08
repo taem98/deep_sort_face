@@ -8,8 +8,8 @@ from natsort import natsorted
 
 class VideoLoader(Visualization):
     def __init__(self, config):
-        if not os.path.isfile(config['videopath']):
-            raise FileNotFoundError("Video file not found")
+        # if not os.path.isfile(config['videopath']):
+        #     raise FileNotFoundError("Video file not found")
         # video_name = pathlib.PurePath(videopath)
         try:
             self.crop_image = config['crop_area']
@@ -58,7 +58,7 @@ class VideoLoader(Visualization):
         _t0 = time.time()
         ret, image = self.vcap.read()
         _t1 = time.time() - _t0
-        if ret and self.frame_idx <= self.config['video_end_frame']:
+        if ret and (self.frame_idx <= self.config['video_end_frame'] or self.config['video_end_frame'] == 0):
             if self.frame_idx >= self.config['video_start_frame']:
                 if self.crop_image:
                     sx = self.crop_image[2]

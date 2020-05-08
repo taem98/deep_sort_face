@@ -86,6 +86,10 @@ class KalmanFilter(object):
         return mean, covariance
 
     def predict(self, mean, covariance):
+        # add for registed object
+        if len(mean) == 0 or len(covariance) == 0:
+            return mean, covariance
+
         """Run Kalman filter prediction step.
 
         Parameters

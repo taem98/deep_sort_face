@@ -117,6 +117,7 @@ class ImageViewer(object):
     def show_image(self):
         if self.is_frame_updated:
             cv2.imshow(self._caption, cv2.resize(self.image, self._window_shape[:2]))
+
             self.is_frame_updated = False
         t1 = time.time()
         remaining_time = max(1, int(self._update_ms - 1e3 * (t1 - self._t0)))
@@ -133,7 +134,7 @@ class ImageViewer(object):
             raise ValueError("color must be tuple of 3")
         self._color = tuple(int(c) for c in value)
 
-    def rectangle(self, x, y, w, h, label=None, pos=0):
+    def rectangle(self, x, y, w, h, label=None, pos=0, track_name=""):
         """Draw a rectangle.
 
         Parameters
@@ -172,6 +173,16 @@ class ImageViewer(object):
             cv2.rectangle(self.image, label_pt1, label_pt2, self._color, -1)
             cv2.putText(self.image, label, center, cv2.FONT_HERSHEY_PLAIN,
                         self.text_size, (255, 255, 255), self.thickness)
+            # blur
+            try:
+                if track_name == label:
+                    pass
+                else:
+                    cut_frame = self.image[label_pt2[1]: pt2[1], pt1[0]: pt2[0]]
+                    blur = cv2.blur(cut_frame, (40, 40))
+                    self.image[label_pt2[1]: pt2[1], pt1[0]: pt2[0]] = blur
+            except:
+                print("face out of")
 
     def circle(self, x, y, radius, label=None):
         """Draw a circle.

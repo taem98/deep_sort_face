@@ -52,7 +52,6 @@ def min_cost_matching(
 
     if len(detection_indices) == 0 or len(track_indices) == 0:
         return [], track_indices, detection_indices  # Nothing to match.
-
     cost_matrix_2, cost_matrix = distance_metric(
         tracks, detections, track_indices, detection_indices)
 
@@ -79,6 +78,7 @@ def min_cost_matching(
         else:
             matches.append((track_idx, detection_idx))
             tracks[track_idx].affinity_score = cost_matrix[row, col]
+
     return matches, unmatched_tracks, unmatched_detections
 
 
@@ -190,7 +190,12 @@ def gate_cost_matrix(
     measurements = np.asarray(
         [detections[i].to_xyah() for i in detection_indices])
     for row, track_idx in enumerate(track_indices):
-        track = tracks[track_idx]
+        # check registed
+        if tracks[track_idx].is_registed_f():
+            pass
+        else:
+            track = tracks[track_idx]
+
         gating_distance = kf.gating_distance(
             track.mean, track.covariance, measurements, only_position)
         cost_matrix[row, gating_distance > gating_threshold] = gated_cost

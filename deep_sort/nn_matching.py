@@ -132,7 +132,16 @@ class NearestNeighborDistanceMetric(object):
                 "Invalid metric; must be either 'euclidean' or 'cosine'")
         self.matching_threshold = matching_threshold
         self.budget = budget
+
         self.samples = {}
+        # data = np.load("./samples_data.npz", allow_pickle=True)
+        # self.samples = data['samples']
+        # data.close()
+        # if self.samples:
+        #     pass
+        # else:
+        #     self.samples = {}
+
 
     def partial_fit(self, features, targets, active_targets):
         """Update the distance metric with new data.
@@ -151,7 +160,10 @@ class NearestNeighborDistanceMetric(object):
             self.samples.setdefault(target, []).append(feature)
             if self.budget is not None:
                 self.samples[target] = self.samples[target][-self.budget:]
+
         self.samples = {k: self.samples[k] for k in active_targets}
+
+
 
     def distance_from_predict(self, features, targets):
         cost_matrix = np.zeros((len(targets)))

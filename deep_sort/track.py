@@ -15,6 +15,7 @@ class TrackState:
     Confirmed = 2
     Deleted = 3
     Predicted = 4
+    Registed = 5
 
 class Track:
     """
@@ -75,10 +76,11 @@ class Track:
         self.state = TrackState.Tentative
         self.features = []
         self.predicted_features = []
-
+        self.is_registed = False
         self.det_meta = []
+        self.name = ""
 
-        if detection:
+        if detection is not None:
             self.det_meta.append([detection.frame_idx, detection.tlwh, detection.label])
             self.features.append(detection.feature)
 
@@ -129,9 +131,10 @@ class Track:
             The Kalman filter.
 
         """
-        self.mean, self.covariance = kf.predict(self.mean, self.covariance)
-        self.age += 1
-        self.time_since_update += 1
+        if len(self.mean) > 0:
+            self.mean, self.covariance = kf.predict(self.mean, self.covariance)
+            self.age += 1
+            self.time_since_update += 1
 
     def update_from_predict(self, detection):
         # self.features.append(detection.feature)
@@ -157,8 +160,9 @@ class Track:
             The associated detection.
 
         """
-        self.mean, self.covariance = kf.update(
-            self.mean, self.covariance, detection.to_xyah())
+        if not self.state == TrackState.Registed:
+            self.mean, self.covariance = kf.update(
+                self.mean, self.covariance, detection.to_xyah())
 
         if detection:
             self.det_meta.append([detection.frame_idx, detection.tlwh, detection.label])
@@ -172,6 +176,8 @@ class Track:
         self.time_since_update = 0
         if self.state == TrackState.Tentative and self.hits >= self._n_init:
             self.state = TrackState.Confirmed
+        if self.state == TrackState.Registed and self.hits >= self._n_init:
+            self.state = TrackState.Confirmed
         if self.state == TrackState.Predicted:
             self.state = TrackState.Confirmed
 
@@ -181,7 +187,10 @@ class Track:
         if self.state == TrackState.Tentative:
             self.state = TrackState.Deleted
         elif self.time_since_update > self._max_age:
-            self.state = TrackState.Deleted
+            if self.is_registed:
+                self.state = TrackState.Registed
+            else:
+                self.state = TrackState.Deleted
 
     def is_tentative(self):
         """Returns True if this track is tentative (unconfirmed).
@@ -198,3 +207,14 @@ class Track:
 
     def is_predicted(self):
         return  self.state == TrackState.Predicted
+
+    def is_registed_f(self):
+        return self.state == TrackState.Registed
+
+    def set_registed_status(self):
+        self.state = TrackState.Registed
+        self.is_registed = True
+
+    def set_name_feature(self, name, features):
+        self.name = name
+        self.features = features

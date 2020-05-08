@@ -73,27 +73,31 @@ class Tracker:
 
         # Update track set.
         for track_idx, detection_idx in matches:
+            # if self.tracks[track_idx].is_registed:
+            if self.tracks[track_idx].is_registed_f():
+                self.tracks[track_idx].mean, self.tracks[track_idx].covariance = self.kf.initiate(detections[detection_idx].to_xyah())
             self.tracks[track_idx].update(
                 self.kf, detections[detection_idx])
+
         predicted_bbox = []
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
-            if self.tracks[track_idx].is_confirmed() and self.tracks[track_idx].time_since_update < 2:
-                tlbr = self.tracks[track_idx].to_tlbr()
-                predicted_bbox.append([frame_idx, track_idx, tlbr[0], tlbr[1], tlbr[2], tlbr[3], 1,
-                                      self.tracks[track_idx].det_meta[-1][2], -1, -1])
-
-        if len(predicted_bbox) > 0:
-            detections_2 = self.encoder.encoding(frame, np.asarray(predicted_bbox), frame_idx)
-            # detection_indices_2 = [idx for idx, det in enumerate(detections_2)]
-            if len(detections_2) > 0:
-                detections_2 = np.asarray(detections_2)
-                unmatched_track_indices = detections_2[:,1].astype(np.int)
-                targets_2 = [self.tracks[idx].track_id for idx in unmatched_track_indices]
-                cost_matrix_2 = self.metric.distance_from_predict(detections_2[:,10:], targets_2)
-                for idx, track_idx in enumerate(unmatched_track_indices):
-                    if cost_matrix_2[idx] < self.metric.matching_threshold:
-                        self.tracks[track_idx].update_from_predict(detections_2[idx])
+        #     if self.tracks[track_idx].is_confirmed() and self.tracks[track_idx].time_since_update < 2:
+        #         tlbr = self.tracks[track_idx].to_tlbr()
+        #         predicted_bbox.append([frame_idx, track_idx, tlbr[0], tlbr[1], tlbr[2], tlbr[3], 1,
+        #                               self.tracks[track_idx].det_meta[-1][2], -1, -1])
+        #
+        # if len(predicted_bbox) > 0:
+        #     detections_2 = self.encoder.encoding(frame, np.asarray(predicted_bbox), frame_idx)
+        #     # detection_indices_2 = [idx for idx, det in enumerate(detections_2)]
+        #     if len(detections_2) > 0:
+        #         detections_2 = np.asarray(detections_2)
+        #         unmatched_track_indices = detections_2[:,1].astype(np.int)
+        #         targets_2 = [self.tracks[idx].track_id for idx in unmatched_track_indices]
+        #         cost_matrix_2 = self.metric.distance_from_predict(detections_2[:,10:], targets_2)
+        #         for idx, track_idx in enumerate(unmatched_track_indices):
+        #             if cost_matrix_2[idx] < self.metric.matching_threshold:
+        #                 self.tracks[track_idx].update_from_predict(detections_2[idx])
 
         # for idx, raw_detect in enumerate(predicted_bbox):
 
@@ -102,14 +106,17 @@ class Tracker:
         self.tracks = [t for t in self.tracks if not t.is_deleted()]
 
         # Update distance metric.
-        active_targets = [t.track_id for t in self.tracks if t.is_confirmed()]
-        features, targets = [], []
+        active_targets = [t.track_id for t in self.tracks if t.is_confirmed() or t.is_registed]
+        features, targets= [], []
         for track in self.tracks:
-            if not track.is_confirmed():
+            # if not track.is_confirmed():
+            #     continue                                                b
+            if track.is_tentative() or track.is_deleted() or track.is_predicted():
                 continue
             features += track.features
             targets += [track.track_id for _ in track.features]
             track.features = []
+
         self.metric.partial_fit(
             np.asarray(features), np.asarray(targets), active_targets)
 
@@ -118,6 +125,7 @@ class Tracker:
         def gated_metric(tracks, dets, track_indices, detection_indices):
             features = np.array([dets[i].feature for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
+
             cost_matrix2 = self.metric.distance(features, targets)
             cost_matrix = linear_assignment.gate_cost_matrix(
                 self.kf, np.copy(cost_matrix2), tracks, dets, track_indices,

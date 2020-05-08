@@ -24,6 +24,11 @@ from evaluator.Evaluator import Evaluator
 from tools.default_args import *
 from mctracker.mctracker import MultiCameraTracker
 from visualizer.PoolLoader import PoolLoader
+# gui
+import sys
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLineEdit, QInputDialog
+import cv2
+import shutil
 
 
 def load_json_config(jsonfile):
@@ -67,7 +72,6 @@ def run(args):
     config.gpu_options.visible_device_list = str(args.gpu)
     config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
     sess = tf.Session(config=config)
-
     # if running_cfg == "from_detect":
     print("THIS MODE WILL RUNNING FROM SCRATCH!!!!")
     print("Detector type {} config: {}".format(detection_cfg['type'], detection_cfg['name']))
@@ -84,6 +88,34 @@ def run(args):
 
     specific_sequence = args.sequence
 
+    def onMouse(event, x, y, flags, param):
+        # global ix, iy
+        ix, iy = -1, -1
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            # ix, iy = x, y
+            pass
+        elif event == cv2.EVENT_MOUSEMOVE:
+            pass
+        elif event == cv2.EVENT_LBUTTONUP:
+            ix, iy = x, y
+
+            knowns_path = 'knowns/'
+            registered_names = os.listdir(knowns_path)
+
+            # register
+            if (76 < x < 500) and (483 < y < 624):
+                if len(registered_names) == 4:
+                    print("not more")
+                else:
+                    n, name = input().split()
+                    print(n + " " + name)
+                    # register test
+                    # exec(open('register.py').read())
+                    sys.exit()
+
+
+
     def run():
         seq_info["input_type"] = "video"
         # seq_info["video_path"] = "http://192.168.0.22:8080/video" #
@@ -98,15 +130,18 @@ def run(args):
             "cosine", args.max_cosine_distance, args.nn_budget)
         tracker = Tracker(metric, encoder, max_iou_distance=0.6, n_init=3)
         # mctracker.updateSingleTracker(tracker, metric)
+        #
 
         while True:
             try:
                 frame_idx, frame = pool_display.read()
+
                 # if frame_idx % 10 != 0:
                 #     pass
             except Exception as e:
                 print(e)
                 break
+
 
             # print("Processing frame %05d" % frame_idx)
             # continue
@@ -161,11 +196,15 @@ def run(args):
     finally:
         print("Release")
         pool_display.stop()
+        cv2.destroyAllWindows()
         try:
             sess.close()
         except Exception:
             pass
 
+
+
 if __name__ == "__main__":
+
     args = parse_args()
     run(args.parse_args())
